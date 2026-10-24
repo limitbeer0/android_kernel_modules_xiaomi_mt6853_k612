@@ -6,3 +6,12 @@ config MTK_RPMB
 	  access RPMB partition.
 
 	  If unsure, select N.
+
+config RPMB_INTF_DEV
+	bool "RPMB character device interface /dev/rpmbN"
+	depends on MTK_RPMB
+	help
+	  Say yes here if you want to access RPMB partition
+	  from user space via character device interface /dev/rpmbN
+
+	  If unsure, select N.

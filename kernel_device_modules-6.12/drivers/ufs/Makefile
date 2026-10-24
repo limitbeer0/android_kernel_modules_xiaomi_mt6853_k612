@@ -1,4 +1,10 @@
 # SPDX-License-Identifier: GPL-2.0
+ifeq ($(CONFIG_CANNON_BRINGUP),y)
+ccflags-y += -I$(srctree)/drivers/ufs/host
+ccflags-y += -I$(srctree)/drivers/ufs/core
+obj-$(CONFIG_CANNON_UFS_MT6853) += ufs-mt6853.o
+else
+# SPDX-License-Identifier: GPL-2.0
 # UFSHCD makefile
 ccflags-y += -I$(DEVICE_MODULES_PATH)/drivers/misc/mediatek/include/
 ccflags-y += -I$(DEVICE_MODULES_PATH)/drivers/misc/mediatek/blocktag/
@@ -23,3 +29,5 @@ ufs-mediatek-mod-$(CONFIG_MTK_RPMB) += ufs-mediatek-rpmb.o ufs-mediatek-ise-dumm
 
 # xaga: platform module wiring
 obj-m += ufs-mediatek-dbg.o
+
+endif # CONFIG_CANNON_BRINGUP

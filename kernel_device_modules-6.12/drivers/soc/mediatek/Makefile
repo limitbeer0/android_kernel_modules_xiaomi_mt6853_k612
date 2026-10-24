@@ -1,4 +1,8 @@
 # SPDX-License-Identifier: GPL-2.0-only
+ifeq ($(CONFIG_CANNON_BRINGUP),y)
+ccflags-y += -I$(DEVICE_MODULES_PATH)/drivers/misc/mediatek/include
+obj-$(CONFIG_DEVICE_MODULES_MTK_PMIC_WRAP) += mtk-pmic-wrap.o
+else
 ccflags-y += -I$(DEVICE_MODULES_PATH)/drivers/misc/mediatek/include
 ccflags-y += -I$(DEVICE_MODULES_PATH)/drivers/clk/mediatek/
 ccflags-y += -I$(DEVICE_MODULES_PATH)/drivers/misc/mediatek/cmdq/mailbox
@@ -57,3 +61,4 @@ obj-m += mtk-socinfo.o
 
 # xaga: platform module wiring
 obj-m += mtk_tinysys_ipi.o
+endif # CONFIG_CANNON_BRINGUP

@@ -118,4 +118,6 @@ endif
 obj-$(CONFIG_DEVICE_MODULES_PINCTRL_MT8195)    += pinctrl-mt8195.o
 
 # xaga: platform module wiring
+ifneq ($(CONFIG_CANNON_BRINGUP),y)
 obj-m += pinctrl-mt6895.o
+endif

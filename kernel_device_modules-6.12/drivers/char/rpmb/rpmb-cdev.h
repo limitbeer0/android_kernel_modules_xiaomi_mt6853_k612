@@ -4,6 +4,11 @@
  */
 
 #ifdef CONFIG_RPMB_INTF_DEV
+#ifdef CONFIG_CANNON_BRINGUP
+struct rpmb_dev;
+long cannon_rpmb_legacy_ioctl(struct rpmb_dev *rdev, unsigned int cmd,
+			      void __user *arg);
+#endif
 int __init rpmb_cdev_init(void);
 void __exit rpmb_cdev_exit(void);
 void rpmb_cdev_prepare(struct rpmb_dev *rdev);

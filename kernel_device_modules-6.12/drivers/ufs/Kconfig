@@ -82,3 +82,12 @@ config MTK_UFS_DEBUG_BUILD
 
 	  If unsure, say N.
 
+
+config CANNON_UFS_MT6853
+	tristate "Cannon MT6853 UFS with legacy firmware"
+	depends on CANNON_BRINGUP && SCSI_UFSHCD_PLATFORM
+	select MFD_SYSCON
+	help
+	  First-stage port of the working MT6853 4.14 reset, link and SMC
+	  sequences. Dynamic power management, MCQ and inline crypto are
+	  disabled until their legacy firmware interfaces are ported.

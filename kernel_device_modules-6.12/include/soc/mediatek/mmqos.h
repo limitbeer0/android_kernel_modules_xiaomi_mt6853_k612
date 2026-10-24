@@ -102,7 +102,7 @@ mtk_mmqos_set_md_type(u32 md_type) { return; }
 static inline s32
 mtk_mmqos_get_cam_hrt(void) { return 0; }
 
-struct MM_bwData *get_mm_bw_data_for_mbrain(void) { return NULL; }
+static inline struct MM_bwData *get_mm_bw_data_for_mbrain(void) { return NULL; }
 #endif
 
 #endif /* MTK_MMQOS_H */

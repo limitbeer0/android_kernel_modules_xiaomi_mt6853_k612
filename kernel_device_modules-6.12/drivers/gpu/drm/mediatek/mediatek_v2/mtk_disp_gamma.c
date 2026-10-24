@@ -491,7 +491,7 @@ static bool disp_gamma_flush_sram(struct mtk_ddp_comp *comp, int cmd_type)
 			cmdq_pkt_flush(cmdq_handle);
 		}
 		break;
-	case GAMMA_RESUME:
+	case GAMMA_RESUME: {
 		bool async = mtk_drm_idlemgr_get_async_status(crtc);
 
 		mtk_drm_trace_begin("gamma flush sram:%d", async);
@@ -514,6 +514,7 @@ static bool disp_gamma_flush_sram(struct mtk_ddp_comp *comp, int cmd_type)
 		}
 		mtk_drm_trace_end();
 		break;
+	}
 	default:
 		PQ_ERR("%s, invalid cmd_type:%d\n", __func__, cmd_type);
 	}

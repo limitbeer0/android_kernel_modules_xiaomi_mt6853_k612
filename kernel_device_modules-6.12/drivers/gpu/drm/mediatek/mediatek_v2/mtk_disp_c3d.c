@@ -585,7 +585,7 @@ static bool disp_c3d_flush_3dlut_sram(struct mtk_ddp_comp *comp, enum C3D_CMDQ_T
 		CRTC_MMP_MARK(0, c3d_frame_config, comp->id, (unsigned long)cmdq_handle);
 		break;
 
-	case C3D_RESUME:
+	case C3D_RESUME: {
 		bool async = mtk_drm_idlemgr_get_async_status(crtc);
 
 		if (async == false)
@@ -605,6 +605,7 @@ static bool disp_c3d_flush_3dlut_sram(struct mtk_ddp_comp *comp, enum C3D_CMDQ_T
 			}
 		}
 		break;
+	}
 	default:
 		break;
 	}

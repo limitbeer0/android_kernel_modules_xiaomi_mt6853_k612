@@ -19,6 +19,42 @@
 
 #include <dt-bindings/clock/mt6853-clk.h>
 
+#ifdef CONFIG_CANNON_BRINGUP
+#include "clk-mt6853-cannon-ids.h"
+#endif
+
+/*
+ * cannon keeps the known-working 4.14 DT and its bootloader DTBO. Those use
+ * different TOP/INFRA IDs. Translate only the DT lookup, never internal IDs.
+ * Missing legacy gates must fail instead of enabling an unrelated clock.
+ */
+static struct clk *mt6853_of_clk_src_get(struct of_phandle_args *spec, void *data)
+{
+#ifdef CONFIG_CANNON_BRINGUP
+	struct of_phandle_args translated = *spec;
+	const u16 *ids = NULL;
+	unsigned int count = 0, id;
+
+	if (of_device_is_compatible(spec->np, "mediatek,mt6853-topckgen")) {
+		ids = cannon_top_ids;
+		count = ARRAY_SIZE(cannon_top_ids);
+	} else if (of_device_is_compatible(spec->np, "mediatek,mt6853-infracfg_ao")) {
+		ids = cannon_infra_ids;
+		count = ARRAY_SIZE(cannon_infra_ids);
+	}
+	if (ids) {
+		if (spec->args_count != 1)
+			return ERR_PTR(-EINVAL);
+		id = spec->args[0];
+		if (id >= count || !ids[id])
+			return ERR_PTR(-ENOENT);
+		translated.args[0] = ids[id] - 1;
+		return of_clk_src_onecell_get(&translated, data);
+	}
+#endif
+	return of_clk_src_onecell_get(spec, data);
+}
+
 /* bringup config */
 #define MT_CCF_BRINGUP		1
 #define MT_CCF_PLL_DISABLE	0
@@ -2074,7 +2110,7 @@ static int clk_mt6853_apmixed_probe(struct platform_device *pdev)
 	mtk_clk_register_gates(node, apmixed_clks, ARRAY_SIZE(apmixed_clks),
 			clk_data);
 
-	r = of_clk_add_provider(node, of_clk_src_onecell_get, clk_data);
+	r = of_clk_add_provider(node, mt6853_of_clk_src_get, clk_data);
 
 	if (r)
 		pr_err("%s(): could not register clock provider: %d\n",
@@ -2102,7 +2138,7 @@ static int clk_mt6853_ifrao_probe(struct platform_device *pdev)
 	mtk_clk_register_gates(node, ifrao_clks, ARRAY_SIZE(ifrao_clks),
 			clk_data);
 
-	r = of_clk_add_provider(node, of_clk_src_onecell_get, clk_data);
+	r = of_clk_add_provider(node, mt6853_of_clk_src_get, clk_data);
 
 	if (r)
 		pr_err("%s(): could not register clock provider: %d\n",
@@ -2146,7 +2182,7 @@ static int clk_mt6853_top_probe(struct platform_device *pdev)
 	mtk_clk_register_composites(top_composites, ARRAY_SIZE(top_composites),
 			base, &mt6853_clk_lock, mt6853_top_clk_data);
 
-	r = of_clk_add_provider(node, of_clk_src_onecell_get,
+	r = of_clk_add_provider(node, mt6853_of_clk_src_get,
 			mt6853_top_clk_data);
 
 	if (r)

@@ -403,6 +403,10 @@ endif
 #endif
 #endif
 
+ifeq ($(CONFIG_CANNON_BRINGUP),y)
+obj-$(CONFIG_DEVICE_MODULES_COMMON_CLK_MEDIATEK) += clk-common.o
+clk-common-y := clk-mtk.o clk-pll.o clk-gate.o clk-mux.o
+else
 # xaga: platform module wiring
 # clk-common: MTK clock framework core (clk-mtk/clk-pll/clk-gate/clk-mux +
 # clkchk/clk-fmeter/mtk-pd-chk/clkdbg). alps builds this via BUILD.bazel;
@@ -459,3 +463,4 @@ obj-m += clk-mt6895-peri.o
 
 # xaga: platform module wiring
 obj-m += clk-mt6895-vcodec.o
+endif # CONFIG_CANNON_BRINGUP

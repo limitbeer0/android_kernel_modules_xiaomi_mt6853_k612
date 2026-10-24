@@ -11,6 +11,11 @@
 #include <linux/types.h>
 #include <linux/trace_events.h>
 
+/* Used by unconditional packet fields and callback declarations below. */
+typedef bool (*cmdq_mminfra_power)(void);
+typedef bool (*cmdq_mminfra_gce_cg)(u32);
+typedef void (*cmdq_usage_cb)(u32);
+
 #if IS_ENABLED(CONFIG_MTK_CMDQ_MBOX_EXT)
 typedef void (*util_dump_dbg_reg)(void *chan);
 typedef void (*util_track_ctrl)(void *cmdq, phys_addr_t base, bool sec, u8 hwid);
@@ -22,11 +27,6 @@ struct cmdq_util_controller_fp {
 	util_thread_ddr_module thread_ddr_module;
 	util_check_tf check_tf;
 };
-
-typedef bool (*cmdq_mminfra_power)(void);
-typedef bool (*cmdq_mminfra_gce_cg)(u32);
-
-typedef void (*cmdq_usage_cb)(u32);
 
 void cmdq_controller_set_fp(struct cmdq_util_controller_fp *cust_cmdq_util);
 #endif

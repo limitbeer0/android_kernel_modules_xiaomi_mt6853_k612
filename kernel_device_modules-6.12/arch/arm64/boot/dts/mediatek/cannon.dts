@@ -1,0 +1,287 @@
+// SPDX-License-Identifier: GPL-2.0-only
+// The complete known-working 4.14 tree is kept byte-for-byte in cannon-stock.dtsi.
+// This is a first-stage port: unsupported multimedia nodes are not evidence of
+// working 6.12 drivers. Keep numeric phandles/clock IDs stable during bring-up.
+/include/ "cannon-stock.dtsi"
+
+&{/} {
+	model = "Xiaomi Redmi Note 9 5G (cannon) - 6.12 bring-up";
+	compatible = "xiaomi,cannon", "mediatek,mt6853";
+};
+
+&{/chosen} {
+	// Memory values verified against the running 4.14 device, 2026-10-18.
+	// ramoops stays built-in and uses the bootloader-reserved mediatek,pstore
+	// mblock; never borrow xaga's 0x7ffbf000 or the minirdump region.
+	bootargs = "console=tty0 console=ttyS0,921600n1 earlycon=uart8250,mmio32,0x11002000 root=/dev/ram cannon.block_fs_tools=1 cannon.fscrypt_legacy_v1=1 printk.devkmsg=on loglevel=8 ignore_loglevel initcall_debug panic=10 clk_ignore_unused pd_ignore_unused regulator_ignore_unused fw_devlink=permissive firmware_class.path=/vendor/firmware ramoops.mem_address=0x4d010000 ramoops.mem_size=0xe0000 ramoops.record_size=0x1000 ramoops.ftrace_size=0x1000 ramoops.console_size=0x40000 ramoops.pmsg_size=0x10000";
+};
+
+&{/mtu3_0@11200000} {
+	compatible = "xiaomi,cannon-mtu3", "mediatek,mtu3";
+	// Upstream reserves both resources. The legacy 0x3000 MAC window
+	// overlaps IPPC at 0x11203e00 and fails devm_ioremap_resource(-EBUSY).
+	// USB2 MAC registers end below +0x2e00; keep IPPC separately owned.
+	reg = <0 0x11201000 0 0x2e00>, <0 0x11203e00 0 0x100>;
+	reg-names = "mac", "ippc";
+	// Port USB2 peripheral first; Type-C/charging and host switching follow.
+	dr_mode = "peripheral";
+	maximum-speed = "high-speed";
+	/delete-property/ extcon;
+	clocks = <0x2b 0x34 0x54 0xe 0x2b 0x72 0x2b 0x4f>;
+	clock-names = "sys_ck", "ref_ck", "dma_ck", "xhci_ck";
+	vusb33-supply = <0xe5>;
+	phys = <&cannon_usb2_phy 3>; // PHY_TYPE_USB2
+	phy-names = "port0_phy";
+	mediatek,u3p-dis-msk = <1>;
+};
+
+&{/usb_xhci@11200000} {
+	status = "disabled";
+};
+
+&{/usb0phy@11e40000} {
+	// 4.14 MT6853 uses T-PHY V2: misc +0, FM +0x100, U2 COM +0x300.
+	compatible = "xiaomi,cannon-tphy", "mediatek,generic-tphy-v2";
+	/delete-property/ reg;
+	/delete-property/ reg-names;
+	#address-cells = <2>;
+	#size-cells = <2>;
+	ranges;
+	/delete-node/ usb_phy_tuning;
+	cannon_usb2_phy: usb-phy@11e40000 {
+		reg = <0 0x11e40000 0 0x700>;
+		#phy-cells = <1>;
+		clocks = <0x54 0xe>;
+		clock-names = "ref";
+		// Values from the working CN board's usb_phy_tuning node.
+		mediatek,eye-vrt = <5>;
+		mediatek,eye-term = <5>;
+		mediatek,pre-emphasis = <2>;
+		mediatek,intr = <0x12>;
+		mediatek,discth = <7>;
+	};
+};
+
+&{/toprgu@10007000} {
+	// Common watchdog register ABI (MODE/LENGTH/RESTART/SWRST), without
+	// claiming any unverified SoC reset-controller map.
+	compatible = "mediatek,mt6853-wdt", "mediatek,mt6589-wdt";
+};
+
+&{/pinctrl} {
+	// 6.12 Paris maps MMIO resources directly; the 4.14 reg_bases phandle
+	// array is no longer read. Keep the old array's exact ordering/addresses.
+	/delete-property/ reg_bases;
+	/delete-property/ reg_base_eint;
+	reg = <0 0x10005000 0 0x1000>,
+	      <0 0x11c30000 0 0x1000>,
+	      <0 0x11c20000 0 0x1000>,
+	      <0 0x11d10000 0 0x1000>,
+	      <0 0x11d30000 0 0x1000>,
+	      <0 0x11d40000 0 0x1000>,
+	      <0 0x11e20000 0 0x1000>,
+	      <0 0x11ea0000 0 0x1000>,
+	      <0 0x11f30000 0 0x1000>;
+	mediatek,eint = <0x37>;
+};
+
+&{/apirq@1000b000} {
+	// 4.14 mt6853_eint_hw: ap_num=128, db_cnt=32, one register bank.
+	// 6.12's legacy matrix path supplies identity EINT mapping + 32 debounce
+	// channels when mediatek,pins is absent.
+	mediatek,total-pin-number = <128>;
+	mediatek,instance-num = <1>;
+	reg-name = "eint";
+	interrupt-parent = <0x1>;
+	interrupts = <0 212 4>;
+};
+
+&{/i2c6@11f00000} {
+	#address-cells = <1>;
+	#size-cells = <0>;
+};
+
+&{/i2c9@11d03000} {
+	#address-cells = <1>;
+	#size-cells = <0>;
+};
+
+&{/pwrap@10026000/mt6359-pmic/mt6359regulator/buck_vs1} {
+	regulator-compatible = "buck-vs1";
+};
+
+&{/pwrap@10026000/mt6359-pmic/mt6359regulator/buck_vgpu11} {
+	regulator-compatible = "buck-vgpu11";
+};
+
+&{/pwrap@10026000/mt6359-pmic/mt6359regulator/buck_vmodem} {
+	regulator-compatible = "buck-vmodem";
+};
+
+&{/pwrap@10026000/mt6359-pmic/mt6359regulator/buck_vpu} {
+	regulator-compatible = "buck-vpu";
+};
+
+&{/pwrap@10026000/mt6359-pmic/mt6359regulator/buck_vcore} {
+	regulator-compatible = "buck-vcore";
+};
+
+&{/pwrap@10026000/mt6359-pmic/mt6359regulator/buck_vs2} {
+	regulator-compatible = "buck-vs2";
+};
+
+&{/pwrap@10026000/mt6359-pmic/mt6359regulator/buck_vpa} {
+	regulator-compatible = "buck-vpa";
+};
+
+&{/pwrap@10026000/mt6359-pmic/mt6359regulator/buck_vproc2} {
+	regulator-compatible = "buck-vproc2";
+};
+
+&{/pwrap@10026000/mt6359-pmic/mt6359regulator/buck_vproc1} {
+	regulator-compatible = "buck-vproc1";
+};
+
+&{/pwrap@10026000/mt6359-pmic/mt6359regulator/ldo_vaud18} {
+	regulator-compatible = "ldo-vaud18";
+};
+
+&{/pwrap@10026000/mt6359-pmic/mt6359regulator/ldo_vsim1} {
+	regulator-compatible = "ldo-vsim1";
+};
+
+&{/pwrap@10026000/mt6359-pmic/mt6359regulator/ldo_vibr} {
+	regulator-compatible = "ldo-vibr";
+};
+
+&{/pwrap@10026000/mt6359-pmic/mt6359regulator/ldo_vrf12} {
+	regulator-compatible = "ldo-vrf12";
+};
+
+&{/pwrap@10026000/mt6359-pmic/mt6359regulator/ldo_vusb} {
+	regulator-compatible = "ldo-vusb";
+};
+
+&{/pwrap@10026000/mt6359-pmic/mt6359regulator/ldo_vsram_proc2} {
+	regulator-compatible = "ldo-vsram-proc2";
+};
+
+&{/pwrap@10026000/mt6359-pmic/mt6359regulator/ldo_vio18} {
+	regulator-compatible = "ldo-vio18";
+};
+
+&{/pwrap@10026000/mt6359-pmic/mt6359regulator/ldo_vcamio} {
+	regulator-compatible = "ldo-vcamio";
+};
+
+&{/pwrap@10026000/mt6359-pmic/mt6359regulator/ldo_vcn18} {
+	regulator-compatible = "ldo-vcn18";
+};
+
+&{/pwrap@10026000/mt6359-pmic/mt6359regulator/ldo_vfe28} {
+	regulator-compatible = "ldo-vfe28";
+};
+
+&{/pwrap@10026000/mt6359-pmic/mt6359regulator/ldo_vcn13} {
+	regulator-compatible = "ldo-vcn13";
+};
+
+&{/pwrap@10026000/mt6359-pmic/mt6359regulator/ldo_vcn33_1_bt} {
+	regulator-compatible = "ldo-vcn33-1-bt";
+};
+
+&{/pwrap@10026000/mt6359-pmic/mt6359regulator/ldo_vcn33_1_wifi} {
+	regulator-compatible = "ldo-vcn33-1-wifi";
+};
+
+&{/pwrap@10026000/mt6359-pmic/mt6359regulator/ldo_vaux18} {
+	regulator-compatible = "ldo-vaux18";
+};
+
+&{/pwrap@10026000/mt6359-pmic/mt6359regulator/ldo_vsram_others} {
+	regulator-compatible = "ldo-vsram-others";
+};
+
+&{/pwrap@10026000/mt6359-pmic/mt6359regulator/ldo_vefuse} {
+	regulator-compatible = "ldo-vefuse";
+};
+
+&{/pwrap@10026000/mt6359-pmic/mt6359regulator/ldo_vxo22} {
+	regulator-compatible = "ldo-vxo22";
+};
+
+&{/pwrap@10026000/mt6359-pmic/mt6359regulator/ldo_vrfck} {
+	regulator-compatible = "ldo-vrfck";
+};
+
+&{/pwrap@10026000/mt6359-pmic/mt6359regulator/ldo_vbif28} {
+	regulator-compatible = "ldo-vbif28";
+};
+
+&{/pwrap@10026000/mt6359-pmic/mt6359regulator/ldo_vio28} {
+	regulator-compatible = "ldo-vio28";
+};
+
+&{/pwrap@10026000/mt6359-pmic/mt6359regulator/ldo_vemc} {
+	regulator-compatible = "ldo-vemc";
+};
+
+&{/pwrap@10026000/mt6359-pmic/mt6359regulator/ldo_vcn33_2_bt} {
+	regulator-compatible = "ldo-vcn33-2-bt";
+};
+
+&{/pwrap@10026000/mt6359-pmic/mt6359regulator/ldo_vcn33_2_wifi} {
+	regulator-compatible = "ldo-vcn33-2-wifi";
+};
+
+&{/pwrap@10026000/mt6359-pmic/mt6359regulator/ldo_va12} {
+	regulator-compatible = "ldo-va12";
+};
+
+&{/pwrap@10026000/mt6359-pmic/mt6359regulator/ldo_va09} {
+	regulator-compatible = "ldo-va09";
+};
+
+&{/pwrap@10026000/mt6359-pmic/mt6359regulator/ldo_vrf18} {
+	regulator-compatible = "ldo-vrf18";
+};
+
+&{/pwrap@10026000/mt6359-pmic/mt6359regulator/ldo_vsram_md} {
+	regulator-compatible = "ldo-vsram-md";
+};
+
+&{/pwrap@10026000/mt6359-pmic/mt6359regulator/ldo_vufs} {
+	regulator-compatible = "ldo-vufs";
+};
+
+&{/pwrap@10026000/mt6359-pmic/mt6359regulator/ldo_vm18} {
+	regulator-compatible = "ldo-vm18";
+};
+
+&{/pwrap@10026000/mt6359-pmic/mt6359regulator/ldo_vbbck} {
+	regulator-compatible = "ldo-vbbck";
+};
+
+&{/pwrap@10026000/mt6359-pmic/mt6359regulator/ldo_vsram_proc1} {
+	regulator-compatible = "ldo-vsram-proc1";
+};
+
+&{/pwrap@10026000/mt6359-pmic/mt6359regulator/ldo_vsim2} {
+	regulator-compatible = "ldo-vsim2";
+};
+
+&{/ufshci@11270000} {
+	compatible = "mediatek,mt6853-ufshci", "mediatek,ufshci";
+	mediatek,infracfg = <0x2b>;
+	// Bring-up keeps the legacy reference clock and link powered.
+	/delete-property/ mediatek,rpm-enable;
+};
+
+&{/pwrap@10026000/mt6359-pmic} {
+	cannon-pmic-keys {
+		compatible = "mediatek,mt6359p-keys";
+		power {
+			linux,keycodes = <116>; // KEY_POWER; release is PMIC IRQ 50.
+		};
+	};
+};

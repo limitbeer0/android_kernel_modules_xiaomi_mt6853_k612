@@ -484,10 +484,12 @@ void disp_aal_notify_backlight_changed(struct mtk_ddp_comp *comp,
 			conn_index = dsi->conn.index;
 		}
 
+#ifdef CONFIG_LEDS_BRIGHTNESS_CHANGED
 		if (mtk_conn_state &&
 				mtk_conn_state->prop_val[conn_index][CONNECTOR_PROP_LED_TYPE] ==
 					LED_TYPE_ATOMIC)
 			hwc_control = true;
+#endif
 
 		AALAPI_LOG("%s: hwc_control[%d]\n", __func__, hwc_control);
 	}

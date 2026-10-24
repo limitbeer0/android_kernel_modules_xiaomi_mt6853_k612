@@ -81,6 +81,18 @@
 #define MT6357_RST_DU_SHIFT			12
 #define INT_MASK_PWRKEY				0x09
 
+#ifdef CONFIG_CANNON_POWERKEY_PANIC
+/*
+ * Adapted from the user's MTK_DEBUG.patch (jsdizkcksv, 2025-06-14):
+ * panic on a SHORT power press so ramoops survives a warm reboot.
+ * This runs in the PMIC IRQ thread; a fully wedged IRQ/PWRAP path still
+ * requires the hardware watchdog. Never panic on release or other keys.
+ */
+static bool powerkey_panic = true;
+module_param(powerkey_panic, bool, 0644);
+MODULE_PARM_DESC(powerkey_panic, "DEBUG: short power press triggers panic for ramoops");
+#endif
+
 struct mtk_pmic_keys_regs {
 	u32 deb_reg;
 	u32 deb_mask;
@@ -470,6 +482,11 @@ static irqreturn_t mtk_pmic_keys_irq_handler_thread(int irq, void *data)
 		pressed = !key_deb;
 	}
 
+#ifdef CONFIG_CANNON_POWERKEY_PANIC
+	if (pressed && info->keycode == KEY_POWER && READ_ONCE(powerkey_panic))
+		panic("cannon debug: short power press requested a warm reboot");
+#endif
+
 	input_report_key(info->keys->input_dev, info->keycode, pressed);
 	input_sync(info->keys->input_dev);
 
@@ -825,7 +842,13 @@ static int mtk_pmic_keys_probe(struct platform_device *pdev)
 		return error;
 	}
 
-	mtk_pmic_keys_lp_reset_setup(keys, mtk_pmic_regs);
+	/* Keep LK's long-press hardware recovery path during cannon bring-up. */
+	if (!IS_ENABLED(CONFIG_CANNON_BRINGUP))
+		mtk_pmic_keys_lp_reset_setup(keys, mtk_pmic_regs);
+#ifdef CONFIG_CANNON_POWERKEY_PANIC
+	dev_notice(keys->dev, "DEBUG: short power press panic %s; LK long-press reset preserved\n",
+		   powerkey_panic ? "enabled" : "disabled");
+#endif
 
 	platform_set_drvdata(pdev, keys);
 

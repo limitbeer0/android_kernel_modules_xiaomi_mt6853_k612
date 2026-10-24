@@ -1,5 +1,21 @@
 # SPDX-License-Identifier: GPL-2.0
 
+ifeq ($(CONFIG_CANNON_BRINGUP),y)
+LINUXINCLUDE := -I$(src)/include -I$(src)/include/uapi $(LINUXINCLUDE)
+subdir-ccflags-y += -I$(src)/include -I$(src)/include/uapi
+obj-y += drivers/clk/mediatek/
+obj-y += drivers/pinctrl/mediatek/
+obj-y += drivers/soc/mediatek/
+obj-y += drivers/mfd/
+obj-y += drivers/regulator/
+obj-y += drivers/input/keyboard/
+obj-y += drivers/ufs/
+obj-y += drivers/tee/
+obj-y += drivers/char/rpmb/
+obj-$(CONFIG_CANNON_ION_COMPAT) += drivers/char/cannon-ion.o
+obj-$(CONFIG_DEVICE_MODULES_DRM_MEDIATEK) += drivers/gpu/drm/mediatek/
+else
+
 ifneq ($(CONFIG_DEVICE_MODULES_ALLOW_BUILTIN),y)
 
 LINUXINCLUDE := $(DEVCIE_MODULES_INCLUDE) $(LINUXINCLUDE)
@@ -117,3 +133,5 @@ obj-y += drivers/video/backlight/
 obj-y += drivers/watchdog/
 
 endif
+
+endif # CONFIG_CANNON_BRINGUP

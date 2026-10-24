@@ -329,7 +329,7 @@ static ssize_t mtk_gpio_write(struct file *file, const char __user *ubuf,
 					val = 3;
 				pullen = r1r0_en[val];
 			} else if (pullen >= MTK_PULL_SET_RSEL_000 &&
-				   pullen <= MTK_PULL_SET_RSEL_MAX) {
+				   pullen <= MTK_PULL_SET_RSEL_111) {
 				/* don't support to change rsel via pullen */
 				pullen = !!val;
 				if (pullup == 2)
@@ -455,7 +455,7 @@ static ssize_t mtk_gpio_write(struct file *file, const char __user *ubuf,
 			hw->soc->bias_get_combo(hw, desc, &pullup, &pullen);
 			if ((pullen < MTK_PUPD_SET_R1R0_00)
 			 || (pullen >= MTK_PULL_SET_RSEL_000 &&
-			     pullen <= MTK_PULL_SET_RSEL_MAX)){
+			     pullen <= MTK_PULL_SET_RSEL_111)){
 				hw->soc->bias_set_combo(hw, desc, !!vals[9],
 					!!vals[8]);
 			} else if (pullen >= MTK_PUPD_SET_R1R0_00 &&

@@ -11869,7 +11869,7 @@ static void ddp_cmdq_cb_blocking(struct mtk_cmdq_cb_data *cb_data)
 	}
 
 	use_frame_submit =
-		mtk_drm_helper_get_opt(priv->helper_opt, MTK_DRM_OPT_FRAME_SUBMIT) &&
+		mtk_drm_helper_get_opt(private->helper_opt, MTK_DRM_OPT_FRAME_SUBMIT) &&
 		drm_crtc_index(crtc) == 0;
 
 	if (use_frame_submit) {

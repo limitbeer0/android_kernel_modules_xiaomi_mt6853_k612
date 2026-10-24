@@ -1,5 +1,19 @@
 # SPDX-License-Identifier: GPL-2.0
 
+config CANNON_BRINGUP
+	bool "Cannon MT6853 first-stage bring-up"
+	help
+	  Build the audited MT6853 clock and pinctrl module set instead of the
+	  unconditional MT6895/xaga module list. Add other cannon subsystems
+	  only after their device-tree bindings and dependencies are ported.
+
+config CANNON_ION_COMPAT
+	tristate "Cannon legacy ION handles over DMA heaps"
+	depends on CANNON_BRINGUP && DMABUF_HEAPS
+	help
+	  Provide the 4.14 handle-based userspace ABI with real system DMA-BUF
+	  allocations. MTK IOVA ioctls and protected heaps are not provided.
+
 config DEVICE_MODULES_ALLOW_BUILTIN
 	bool "allow builtin drivers into kernel image"
 	help

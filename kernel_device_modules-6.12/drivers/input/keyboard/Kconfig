@@ -24,3 +24,13 @@ config DEVICE_MODULES_KEYBOARD_MTK_PMIC
 	  module will be called mtk-pmic-keys.
 
 endif
+
+config CANNON_POWERKEY_PANIC
+	bool "Cannon debug: short power key press triggers panic"
+	depends on CANNON_BRINGUP && DEVICE_MODULES_KEYBOARD_MTK_PMIC
+	default n
+	help
+	  Trigger panic on a pressed KEY_POWER interrupt to preserve ramoops
+	  across a warm restart. Debug images only. Full IRQ/bus lockups also
+	  need a hardware watchdog. Can be disabled with the module parameter
+	  mtk_pmic_keys.powerkey_panic=0.

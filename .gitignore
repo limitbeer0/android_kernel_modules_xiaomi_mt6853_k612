@@ -1,2 +1,4 @@
 # local build outputs (build.sh)
 out/
+out-cannon/
+cannon/__pycache__/

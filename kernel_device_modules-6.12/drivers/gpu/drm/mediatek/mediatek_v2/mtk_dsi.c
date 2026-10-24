@@ -2941,7 +2941,7 @@ static void mtk_dsi_tx_buf_rw(struct mtk_dsi *dsi)
 			else
 				DDPMSG("%s, %d, unknown id:%d\n", __func__, __LINE__, comp->id);
 			break;
-		case MMSYS_MT6993:
+		case MMSYS_MT6993: {
 			unsigned int lane_num = 0;
 
 			/* check lane_num */
@@ -2954,6 +2954,7 @@ static void mtk_dsi_tx_buf_rw(struct mtk_dsi *dsi)
 			buf_con = REG_FLD_VAL_GET(DSI_BUF_REAL_SIZE, buf_con);
 			buf_con += 1;
 			break;
+		}
 		default:
 			break;
 		}
@@ -17629,6 +17630,7 @@ static int dsi_dcs_read(struct mtk_dsi *dsi,
 	return ret;
 }
 
+#ifdef CONFIG_MI_DISP_ESD_CHECK
 static int mi_mtk_dsi_esd_read(struct mtk_ddp_comp *comp, void *handle)
 {
 	int i;
@@ -17740,6 +17742,7 @@ static int mi_mtk_dsi_esd_cmp(struct mtk_ddp_comp *comp)
 	memset(esd_ctx->esd_read_result, 0, sizeof(esd_ctx->esd_read_result));
 	return ret;
 }
+#endif
 
 int fbconfig_get_esd_check(struct mtk_dsi *dsi, uint32_t cmd,
 						uint8_t *buffer, uint32_t num)

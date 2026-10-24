@@ -834,6 +834,11 @@ static int mt6397_probe(struct platform_device *pdev)
 
 static const struct of_device_id mt6397_of_match[] = {
 	{
+		/* Cannon's existing DT and PWRAP slave binding use this name. */
+		.compatible = "mediatek,mt6359-pmic",
+		.data = &mt6359p_core,
+	},
+	{
 		.compatible = "mediatek,mt6323",
 		.data = &mt6323_core,
 	}, {

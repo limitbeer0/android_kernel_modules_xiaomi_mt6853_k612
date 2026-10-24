@@ -673,7 +673,7 @@ static int mtk_pinconf_bias_set_pu_pd(struct mtk_pinctrl *hw,
 	int err, pu, pd;
 
 	if (arg >= MTK_PULL_SET_RSEL_000 &&
-	    arg <= MTK_PULL_SET_RSEL_MAX)
+	    arg <= MTK_PULL_SET_RSEL_111)
 		arg = MTK_ENABLE;
 
 	if (arg == MTK_DISABLE) {

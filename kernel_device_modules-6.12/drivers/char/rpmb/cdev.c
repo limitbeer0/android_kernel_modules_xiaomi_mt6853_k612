@@ -256,16 +256,29 @@ static long rpmb_ioctl(struct file *fp, unsigned int cmd, unsigned long arg)
 {
 	struct rpmb_dev *rdev = fp->private_data;
 	void __user *ptr = (void __user *)arg;
+	long ret;
 
+	pr_info_ratelimited("cannon-rpmb: ioctl=0x%x comm=%s\n", cmd, current->comm);
+#ifdef CONFIG_CANNON_BRINGUP
+	if (cmd >= 5 && cmd <= 9) {
+		ret = cannon_rpmb_legacy_ioctl(rdev, cmd, ptr);
+		pr_info_ratelimited("cannon-rpmb: legacy ioctl=%u result=%ld\n", cmd, ret);
+		return ret;
+	}
+#endif
 	switch (cmd) {
 	case RPMB_IOC_REQ_CMD:
-		return rpmb_ioctl_req_cmd(rdev, ptr);
+		ret = rpmb_ioctl_req_cmd(rdev, ptr);
+		break;
 	case RPMB_IOC_SEQ_CMD:
-		return rpmb_ioctl_seq_cmd(rdev, ptr);
+		ret = rpmb_ioctl_seq_cmd(rdev, ptr, 0);
+		break;
 	default:
 		dev_notice(&rdev->dev, "unsupported ioctl 0x%x.\n", cmd);
-		return -ENOIOCTLCMD;
+		ret = -ENOIOCTLCMD;
 	}
+	pr_info_ratelimited("cannon-rpmb: ioctl=0x%x result=%ld\n", cmd, ret);
+	return ret;
 }
 
 #ifdef CONFIG_COMPAT

@@ -267,7 +267,7 @@ int mt6358_irq_init(struct mt6397_chip *chip)
 		chip->irq_data = &mt6358_irqd;
 		break;
 
-	case MT6359P_CHIP_ID:
+	case MT6359_CHIP_ID:
 		chip->irq_data = &mt6359p_irqd;
 		break;
 

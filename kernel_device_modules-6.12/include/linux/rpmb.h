@@ -9,6 +9,7 @@
 #include <linux/types.h>
 #include <linux/device.h>
 #include <linux/kref.h>
+#include <linux/cdev.h>
 
 #define RPMB_KEY_LEN 32
 #define RPMB_HMAC_LEN RPMB_KEY_LEN
@@ -195,6 +196,10 @@ struct rpmb_dev {
 	struct mutex lock; /* device serialization lock */
 	struct device dev;
 	int    id;
+#ifdef CONFIG_RPMB_INTF_DEV
+	struct cdev cdev;
+	unsigned long status;
+#endif /* CONFIG_RPMB_INTF_DEV */
 	const struct rpmb_ops *ops;
 };
 
@@ -258,5 +263,30 @@ static inline int rpmb_mtk_cmd_req(struct rpmb_dev *rdev, struct rpmb_data *data
 }
 
 #endif /* CONFIG_MTK_RPMB */
+
+
+/* uapi ioctl definitions (copied from 4.14 include/uapi/linux/rpmb.h) */
+struct rpmb_ioc_cmd {
+	__u32 flags;
+	__u32 nframes;
+	__aligned_u64 frames_ptr;
+};
+
+#define rpmb_ioc_cmd_set_frames(_cmd, _ptr) \
+	(_cmd).frames_ptr = (__aligned_u64)(intptr_t)(_ptr)
+
+struct rpmb_ioc_req_cmd {
+	__u64 req_type;
+	struct rpmb_ioc_cmd icmd;
+	struct rpmb_ioc_cmd ocmd;
+};
+
+struct rpmb_ioc_seq_cmd {
+	__u64 num_of_cmds;
+	struct rpmb_ioc_cmd cmds[0];
+};
+
+#define RPMB_IOC_REQ_CMD _IOWR(0xB5, 0, struct rpmb_ioc_req_cmd)
+#define RPMB_IOC_SEQ_CMD _IOWR(0xB5, 1, struct rpmb_ioc_seq_cmd)
 
 #endif /* __RPMB_H__ */

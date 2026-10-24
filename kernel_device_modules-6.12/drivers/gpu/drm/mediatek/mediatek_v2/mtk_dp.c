@@ -2484,7 +2484,7 @@ int mdrv_DPTx_Training_Handler(struct mtk_dp *mtk_dp)
 		}
 		break;
 
-	case DPTX_NTSTATE_CHECKEDID:
+	case DPTX_NTSTATE_CHECKEDID: {
 		unsigned long start_time = jiffies;
 
 		// Add retry to fit certain hub
@@ -2531,6 +2531,7 @@ int mdrv_DPTx_Training_Handler(struct mtk_dp *mtk_dp)
 
 		mtk_dp->training_state = DPTX_NTSTATE_TRAINING_PRE;
 		break;
+	}
 
 	case DPTX_NTSTATE_TRAINING_PRE:
 		mtk_dp->training_state = DPTX_NTSTATE_TRAINING;

@@ -1,4 +1,7 @@
 # SPDX-License-Identifier: GPL-2.0
+ifeq ($(CONFIG_CANNON_BRINGUP),y)
+obj-$(CONFIG_REGULATOR_MT6359P) += mt6359p-regulator.o
+else
 #
 # Makefile for regulator drivers.
 ccflags-y += -I$(DEVICE_MODULES_PATH)/drivers/regulator
@@ -29,3 +32,4 @@ obj-m += rt5133-regulator.o
 
 # xaga: platform module wiring
 obj-m += rt6160-regulator.o
+endif # CONFIG_CANNON_BRINGUP

@@ -610,7 +610,7 @@ ssize_t mtk_pctrl_show_one_pin(struct mtk_pinctrl *hw,
 	if (val < 0) {
 		pullen = -1;
 	} else if (!val && pullen >= MTK_PULL_SET_RSEL_000
-		&& pullen <= MTK_PULL_SET_RSEL_MAX) {
+		&& pullen <= MTK_PULL_SET_RSEL_111) {
 		rsel = pullen - MTK_PULL_SET_RSEL_000;
 		if (pullup == 2) {
 			pullup = 0;
@@ -1022,12 +1022,13 @@ int mtk_paris_pinctrl_probe(struct platform_device *pdev)
 	hw->nbase = i;
 	hw->base = devm_kmalloc_array(&pdev->dev, i, sizeof(*hw->base),
 		GFP_KERNEL | __GFP_ZERO);
-	if (IS_ERR(hw->base))
-		return PTR_ERR(hw->base);
+	if (!hw->base)
+		return -ENOMEM;
 	for (i = 0; i < hw->nbase; i++) {
 		hw->base[i] = of_iomap(np, i);
-		if (IS_ERR(hw->base[i]))
-			return PTR_ERR(hw->base[i]);
+		if (!hw->base[i])
+			return dev_err_probe(dev, -ENOMEM,
+					     "Failed to map pinctrl bank %d\n", i);
 	}
 
 	if (of_find_property(hw->dev->of_node,

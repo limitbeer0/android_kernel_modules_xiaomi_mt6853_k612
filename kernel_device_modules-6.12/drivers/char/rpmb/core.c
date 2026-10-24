@@ -317,7 +317,7 @@ static void rpmb_dev_release(struct device *dev)
 }
 
 struct class rpmb_mtk_class = {
-#if IS_ENABLED(CONFIG_ARCH_MEDIATEK)
+#if IS_ENABLED(CONFIG_ARCH_MEDIATEK) && !IS_ENABLED(CONFIG_CANNON_BRINGUP)
 	.name = "rpmb_dummy",
 #else
 	.name = "rpmb",
@@ -532,7 +532,7 @@ struct rpmb_dev *rpmb_mtk_dev_register(struct device *dev,
 	rdev->ops = ops;
 	rdev->id = id;
 
-#if IS_ENABLED(CONFIG_ARCH_MEDIATEK)
+#if IS_ENABLED(CONFIG_ARCH_MEDIATEK) && !IS_ENABLED(CONFIG_CANNON_BRINGUP)
 	dev_set_name(&rdev->dev, "rpmb_dummy%d", id);
 #else
 	dev_set_name(&rdev->dev, "rpmb%d", id);
