@@ -37,16 +37,20 @@
 #include <asm/barrier.h>
 #include <soc/mediatek/smi.h>
 #if IS_ENABLED(CONFIG_MTK_IOMMU_MISC_DBG)
-#include <../misc/mediatek/iommu/iommu_debug.h>
+#include "../misc/mediatek/iommu/iommu_debug.h"
 #endif
 #if IS_ENABLED(CONFIG_MTK_IOMMU_MISC_SECURE)
-#include <../misc/mediatek/iommu/iommu_secure.h>
+#include "../misc/mediatek/iommu/iommu_secure.h"
+#endif
+#ifndef IOMMU_BRING_UP
+#define IOMMU_BRING_UP (0)
 #endif
 #if IS_ENABLED(CONFIG_DEVICE_MODULES_MTK_SMI) && !IOMMU_BRING_UP
-#include <../misc/mediatek/smi/mtk-smi-dbg.h>
+#include "../misc/mediatek/smi/mtk-smi-dbg.h"
 #endif
 
 #include "mtk_iommu.h"
+#include "../misc/mediatek/iommu/mtk-iommu-util.h"
 
 #define REG_MMU_PT_BASE_ADDR			0x000
 
@@ -1121,7 +1125,8 @@ static void mtk_iommu_tlb_flush_check(struct mtk_iommu_data *data, bool range)
 			__func__, data->plat_data->iommu_type, data->plat_data->iommu_id);
 		mtk_dump_reg_for_hang_issue(data);
 #if IS_ENABLED(CONFIG_DEVICE_MODULES_MTK_SMI) && !IOMMU_BRING_UP
-		mtk_smi_dbg_hang_detect("iommu");
+		if (!IS_ENABLED(CONFIG_CANNON_BRINGUP) || IS_REACHABLE(CONFIG_MTK_SMI_DEBUG))
+			mtk_smi_dbg_hang_detect("iommu");
 #endif
 		pr_warn("%s, dump: 0x20:0x%x, 0x12c:0x%x\n",
 			__func__, readl_relaxed(data->base + REG_MMU_INVALIDATE),
@@ -1132,7 +1137,8 @@ static void mtk_iommu_tlb_flush_check(struct mtk_iommu_data *data, bool range)
 			__func__, data->plat_data->iommu_type, data->plat_data->iommu_id);
 		mtk_dump_reg_for_hang_issue(data);
 #if IS_ENABLED(CONFIG_DEVICE_MODULES_MTK_SMI) && !IOMMU_BRING_UP
-		mtk_smi_dbg_hang_detect("iommu");
+		if (!IS_ENABLED(CONFIG_CANNON_BRINGUP) || IS_REACHABLE(CONFIG_MTK_SMI_DEBUG))
+			mtk_smi_dbg_hang_detect("iommu");
 #endif
 		pr_warn("%s, dump: 0x20:0x%x, 0x12c:0x%x\n",
 			__func__, readl_relaxed(data->base + REG_MMU_INVALIDATE),
@@ -3229,7 +3235,8 @@ skip_smi:
 	}
 
 #if IS_ENABLED(CONFIG_DEVICE_MODULES_MTK_SMI) && !IOMMU_BRING_UP
-	if (data->plat_data->iommu_type == MM_IOMMU) {
+	if (data->plat_data->iommu_type == MM_IOMMU &&
+	    (!IS_ENABLED(CONFIG_CANNON_BRINGUP) || IS_REACHABLE(CONFIG_MTK_SMI_DEBUG))) {
 		if (register_dbg_notifier != 1) {
 			mtk_smi_dbg_register_notifier(&mtk_iommu_dbg_hang_nb);
 			register_dbg_notifier = 1;

@@ -1,5 +1,26 @@
 # Cannon 6.12 源码状态（2026-10-18）
 
+> **2026-10-25 08:35 最新状态（覆盖下方历史）**
+>
+> test51：普通页堆旧ION ABI已在6.12 DMA heaps上实测通过，64位及真实32位均PASS；见modules仓库cannon/ION.md。
+> test54：6.12基线MT6853 CMDQ/GCE实际执行scratch写入，四个字全部PASS，normal adb uid0、全局Enforcing；43个ko仍放boot ramdisk，Clang/LLD13。
+> test52缺CMDQ配置导致的core panic、test53关闭空MMINFRA电源域导致的panic均已修复。
+>
+> **用户要求panic自动回rec，已实测两轮成功**：PID1于UFS就绪后立即写misc BCB、fsync并回读，先于TEE/图形模块。
+> test53早期模块panic与test54 Android运行后sysrq-c panic均按panic=10复位并自动进入Fox，主机未发reboot recovery。
+> **当前官方启动链不能仅靠WDT NONRST_REG2 bit1**：test54清零BCB隔离后虽硬件位写成功，仍回到normal 6.12。因此必须保留提前写BCB；UFS可用前的panic尚不在已验证覆盖内。
+> 详见modules仓库cannon/PANIC-RECOVERY.md、PROGRESS-20261025.md；证据device-cannon/test53及test54/default-panic。
+>
+> **手机已恢复正常MIUI14**：完整working boot读回8bf3c2169c5eb77974068fdd286918454f7bfba207ecd01c436bf1d94c95eabb；
+> 正常adb确认4.14.336、V14.0.6.0.SJECNXM、boot_completed=1、CE=true、Enforcing、uid0/u:r:ksu:s0。
+> 独立DTBO仍da9753356ca4c5ed71c5e7caca72379d0e7996c7091ce32fd6b7f8ef2e74cbe8；LK/Preloader未改。
+> 恢复源device-cannon/miui14-working/boot.img，禁止用旧A16整份boot恢复MIUI14。只允许flash boot，不能fastboot boot。
+>
+> **下一步**：继续使用6.12基线的SMI/IOMMU/SCPSYS/DRM。已有cannon-mm-providers.dtsi和SCPSYS preserve-boot-power-state源码草案，但尚未激活/编译实测；不要把SMI/IOMMU ko加载当作已bind成功。DRM/Mali及6.12完整UI/CE仍未通过。
+> 用户已自行push common db778c8ca、modules d193116，作者仅limitbeer0；之后本轮修改尚未提交，后续提交也不要加其他作者或Co-authored-by，源码原版权保留。
+>
+> **下方为历史记录。**
+
 ## 2026-10-24 晚间 test47–50：USB、长窗口及adb root已实测
 
 当前手机已恢复MIUI14 working完整boot（8bf3c216…eabb），正常4.14.336、

@@ -44,6 +44,19 @@ def main():
             raise SystemExit("PIO points at a different EINT controller")
         if "mediatek,mt6589-wdt" not in get(merged, "s", "/toprgu@10007000", "compatible").split():
             raise SystemExit("Missing common watchdog fallback")
+        spm = "/power-controller@10006000"
+        if (get(merged, "x", spm, "reg") != "0 10006000 0 1000" or
+                get(merged, "u", spm, "#power-domain-cells") != "1"):
+            raise SystemExit("SCPSYS must use the 6.12 SPM binding, not the legacy clock-provider register list")
+        props = subprocess.check_output(["fdtget", "-p", str(merged), spm], text=True).splitlines()
+        if "#clock-cells" in props or "mediatek,preserve-boot-power-state" not in props:
+            raise SystemExit("SCPSYS boot power-state adoption is not configured")
+        for node in ("/disp_smi_common@14002000", "/smi_larb0@14003000",
+                     "/smi_larb1@14004000", "/m4u@14016000"):
+            if get(merged, "x", node, "power-domains") != get(merged, "x", spm, "phandle") + " c":
+                raise SystemExit(f"{node} must use the MT6853 display power domain")
+        if get(merged, "s", "/m4u@14016000", "compatible") != "mediatek,mt6853-m4u":
+            raise SystemExit("Missing MT6853 IOMMU provider binding")
         keys = "/pwrap@10026000/mt6359-pmic/cannon-pmic-keys"
         if get(merged, "s", keys, "compatible") != "mediatek,mt6359p-keys":
             raise SystemExit("PMIC power key compatible changed by overlay")

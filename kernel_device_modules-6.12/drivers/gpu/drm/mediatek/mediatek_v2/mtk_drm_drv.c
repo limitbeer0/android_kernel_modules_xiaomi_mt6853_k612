@@ -8195,8 +8195,18 @@ static void mtk_drm_get_top_clk(struct mtk_drm_private *priv)
 	}
 
 	clk_num = of_count_phandle_with_args(node, "clocks", "#clock-cells");
-	if (clk_num == -ENOENT) {
-		priv->top_clk_num = -1;
+	/* top_clk_num is unsigned, so every "disabled" state must be 0.
+	 * The stock -1 sentinel survives xaga only because its clock list
+	 * always resolves: on cannon the first dispsys_config clock is the
+	 * legacy SCPSYS clock provider whose #clock-cells the 6.12 power
+	 * domain binding deletes, so of_count fails with -EINVAL and the
+	 * unsigned count passes every `<= 0` check before first_enable
+	 * dereferences the NULL array (real device, test57b Oops). */
+	if (clk_num <= 0) {
+		if (clk_num != -ENOENT)
+			DDPMSG("%s: no usable top clocks (count %d); continuing without them\n",
+			       __func__, clk_num);
+		priv->top_clk_num = 0;
 		priv->top_clk = NULL;
 		return;
 	}
@@ -8204,6 +8214,10 @@ static void mtk_drm_get_top_clk(struct mtk_drm_private *priv)
 
 	priv->top_clk = devm_kmalloc_array(dev, priv->top_clk_num,
 					   sizeof(*priv->top_clk), GFP_KERNEL);
+	if (!priv->top_clk) {
+		priv->top_clk_num = 0;
+		return;
+	}
 
 	/* for power clks, only enable after callback is registered */
 	if (!priv->pwr_node) {
@@ -8216,7 +8230,7 @@ static void mtk_drm_get_top_clk(struct mtk_drm_private *priv)
 
 		if (IS_ERR(clk)) {
 			DDPPR_ERR("%s get %d clk failed\n", __func__, i);
-			priv->top_clk_num = -1;
+			priv->top_clk_num = i;
 			return;
 		}
 
@@ -10028,6 +10042,10 @@ static int mtk_drm_init_emi_eff_table(struct drm_device *drm_dev)
 	unsigned int dram_type = 0;
 	int ret = -ENODEV;
 
+	if (!IS_REACHABLE(CONFIG_MTK_DRAMC)) {
+		DDPMSG("%s: DRAMC unavailable; keeping default EMI efficiency\n", __func__);
+		return 0;
+	}
 	dram_type = mtk_dramc_get_ddr_type();
 	if ((dram_type == TYPE_LPDDR4) ||
 		(dram_type == TYPE_LPDDR4X) ||

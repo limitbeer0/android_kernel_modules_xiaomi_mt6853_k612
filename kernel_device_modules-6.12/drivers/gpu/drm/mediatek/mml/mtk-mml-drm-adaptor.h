@@ -9,6 +9,7 @@
 
 #include <linux/platform_device.h>
 #include <linux/types.h>
+#include <linux/errno.h>
 
 #include "mtk-mml.h"
 
@@ -82,6 +83,8 @@ struct mml_drm_param {
 	void (*disp_dump_dl_cb)(void *disp_crtc);
 };
 
+#if !IS_ENABLED(CONFIG_CANNON_BRINGUP) || IS_REACHABLE(CONFIG_MTK_MML) || \
+	IS_REACHABLE(CONFIG_MTK_MML_LEGACY)
 /*
  * mml_drm_get_hw_caps - Query mml supported modes. The mode bits refer to enum mml_mode
  *
@@ -288,5 +291,75 @@ const struct mml_topology_path *mml_drm_query_dl_path(struct mml_drm_ctx *dctx,
  *
  */
 void mml_drm_submit_timeout(void);
+
+#else
+/* Cannon's MT6853 display path has no configured MML engine. Advertise no
+ * capability and reject processing requests; never report a submitted job.
+ */
+static inline int mml_drm_get_hw_caps(u32 *mode_caps, u32 *pq_caps)
+{
+	*mode_caps = 0;
+	*pq_caps = 0;
+	return -EOPNOTSUPP;
+}
+static inline bool mml_drm_query_hw_support(const struct mml_frame_info *info)
+{
+	return false;
+}
+static inline enum mml_mode mml_drm_query_cap(struct mml_drm_ctx *dctx,
+					     struct mml_frame_info *info)
+{
+	return MML_MODE_NOT_SUPPORT;
+}
+static inline int mml_drm_query_multi_layer(struct mml_drm_ctx *dctx,
+	struct mml_frame_info *infos, u32 cnt, u32 duration_us)
+{
+	u32 i;
+
+	for (i = 0; i < cnt; i++)
+		infos[i].mode = MML_MODE_NOT_SUPPORT;
+	return -EOPNOTSUPP;
+}
+static inline void mml_drm_try_frame(struct mml_drm_ctx *dctx, struct mml_frame_info *info) {}
+static inline struct mml_drm_ctx *mml_drm_get_context(struct platform_device *pdev,
+	struct mml_drm_param *disp, struct mml_drm_ctx *dctx)
+{
+	return NULL;
+}
+static inline bool mml_drm_ctx_idle(struct mml_drm_ctx *dctx)
+{
+	return true;
+}
+static inline void mml_drm_put_context(struct mml_drm_ctx *dctx) {}
+static inline void mml_drm_kick_done(struct mml_drm_ctx *dctx) {}
+static inline void mml_drm_set_panel_pixel(struct mml_drm_ctx *dctx, u32 w, u32 h) {}
+static inline s32 mml_drm_racing_config_sync(struct mml_drm_ctx *dctx,
+	struct cmdq_pkt *pkt, u32 disp_fid)
+{
+	return -EOPNOTSUPP;
+}
+static inline s32 mml_drm_racing_stop_sync(struct mml_drm_ctx *dctx, struct cmdq_pkt *pkt)
+{
+	return -EOPNOTSUPP;
+}
+static inline void mml_drm_split_info(struct mml_submit *submit, struct mml_submit *pq) {}
+static inline s32 mml_drm_submit(struct mml_drm_ctx *dctx, struct mml_submit *submit, void *param)
+{
+	return -EOPNOTSUPP;
+}
+static inline s32 mml_drm_stop(struct mml_drm_ctx *dctx, struct mml_submit *submit, bool force)
+{
+	return -EOPNOTSUPP;
+}
+static inline void mml_drm_config_rdone(struct mml_drm_ctx *dctx,
+	struct mml_submit *submit, struct cmdq_pkt *pkt) {}
+static inline void mml_drm_dump(struct mml_drm_ctx *dctx, struct mml_submit *submit) {}
+static inline const struct mml_topology_path *mml_drm_query_dl_path(struct mml_drm_ctx *dctx,
+	struct mml_submit *submit, u32 pipe)
+{
+	return NULL;
+}
+static inline void mml_drm_submit_timeout(void) {}
+#endif
 
 #endif	/* __MTK_MML_DRM_ADAPTOR_H__ */

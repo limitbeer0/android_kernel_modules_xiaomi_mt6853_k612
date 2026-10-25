@@ -1,0 +1,8 @@
+// SPDX-License-Identifier: (GPL-2.0 OR MIT)
+// Diagnostic client only. Larb0 port3 is DISP_FAKE0, not a live scanout port.
+/ {
+	cannon-iommu-probe {
+		compatible = "xiaomi,cannon-iommu-probe";
+		iommus = <0x83 3>;
+	};
+};

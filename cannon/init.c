@@ -179,12 +179,13 @@ static char path[512];
  */
 static void arm_recovery_boot(void)
 {
-	char msg[32];
+	static int armed;
+	char msg[32], verify[32];
 	long dev = -1, result, i;
 	int j;
 	static const char bootrec[] = "boot-recovery";
 
-	if (watchdog_probe_only)
+	if (watchdog_probe_only || armed)
 		return;
 	for (j = 0; j < (int)sizeof(msg); j++)
 		msg[j] = 0;
@@ -199,7 +200,7 @@ static void arm_recovery_boot(void)
 	call5(40, (long)"devtmpfs", (long)"/mnt", (long)"devtmpfs", 0, 0);
 	/* Wait up to ~3s for the UFS misc block device to show up. */
 	for (i = 0; i < 30; i++) {
-		dev = call4(56, -100, (long)"/mnt/sdc2", 1, 0);
+		dev = call4(56, -100, (long)"/mnt/sdc2", 2, 0); /* O_RDWR */
 		if (dev >= 0)
 			break;
 		{ long ts[2] = {0, 100000000}; call3(101, (long)ts, 0, 0); }
@@ -209,12 +210,29 @@ static void arm_recovery_boot(void)
 		return;
 	}
 	result = call3(64, dev, (long)msg, sizeof(msg));
-	call3(82, dev, 0, 0);
+	result = result == sizeof(msg) ? call3(82, dev, 0, 0) : -5; /* fsync */
+	if (!result) result = call3(62, dev, 0, 0); /* lseek, SEEK_SET */
+	if (!result) result = call3(63, dev, (long)verify, sizeof(verify));
+	if (result == sizeof(verify)) {
+		for (j = 0; j < (int)sizeof(msg); j++)
+			if (msg[j] != verify[j]) break;
+		armed = j == (int)sizeof(msg);
+	}
 	call3(57, dev, 0, 0);
-	if (result == sizeof(msg))
-		logstr("<5>cannon-init: boot-recovery armed; watchdog reset enters Recovery\n");
+	if (armed)
+		logstr("<5>cannon-init: boot-recovery synced and verified; panic/watchdog reset enters Recovery\n");
 	else
-		logstr("<5>cannon-init: boot-recovery write failed\n");
+		fail("boot-recovery write/fsync/readback", result < 0 ? result : 5);
+}
+
+static int is_ufs_module(const char *name)
+{
+	static const char ufs[] = "/lib/modules/ufs-mt6853.ko";
+	unsigned int i;
+
+	for (i = 0; i < sizeof(ufs); i++)
+		if (name[i] != ufs[i]) return 0;
+	return 1;
 }
 
 /*
@@ -324,6 +342,8 @@ __attribute__((noreturn,used)) void start_c(long *stack)
 		call3(57, fd, 0, 0);
 		if (result < 0 && result != -17) fail(path, result); /* EEXIST */
 		watchdog_ping();
+		/* Arm before TEE/graphics probes can panic, once UFS can access misc. */
+		if (is_ufs_module(path)) arm_recovery_boot();
 	}
 	if (watchdog_crypto_test)
 		crypto_diagnostic(envp);

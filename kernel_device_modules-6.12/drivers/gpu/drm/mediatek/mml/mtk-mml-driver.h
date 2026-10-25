@@ -40,7 +40,15 @@ enum mml_sys_id {
 	mml_max_sys
 };
 
+#if IS_ENABLED(CONFIG_CANNON_BRINGUP) && !IS_REACHABLE(CONFIG_MTK_MML) && \
+	!IS_REACHABLE(CONFIG_MTK_MML_LEGACY)
+static inline struct platform_device *mml_get_plat_device(struct platform_device *pdev)
+{
+	return NULL;
+}
+#else
 struct platform_device *mml_get_plat_device(struct platform_device *pdev);
+#endif
 
 static inline int of_mml_count_comps(const struct device_node *np)
 {

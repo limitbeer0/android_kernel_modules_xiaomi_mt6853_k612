@@ -59,6 +59,17 @@ def main():
     if not roots:
         raise SystemExit("No cannon device modules were built")
     roots.extend(args.root)
+    # A SCPSYS probe can touch power/reset state. Run it only after the UFS
+    # module, when cannon-init has synced and verified the Recovery BCB.
+    # Keep the existing functional ordering of clocks, PMIC and UFS intact.
+    power_roots = {"cannon_scpsys_core", "mtk_scpsys_mt6853"}
+    delayed = [name for name in roots if key(name) in power_roots]
+    if delayed:
+        roots = [name for name in roots if key(name) not in power_roots]
+        if "ufs_mt6853" not in [key(name) for name in roots]:
+            raise ValueError("SCPSYS requires the UFS Recovery barrier")
+        index = [key(name) for name in roots].index("ufs_mt6853") + 1
+        roots[index:index] = delayed
     builtins = {key(Path(line).name) for line in
                 (args.kernel_out / "modules.builtin").read_text().splitlines()}
     done, visiting, ordered, records = set(), set(), [], {}
@@ -96,6 +107,10 @@ def main():
 
     for name in roots:
         visit(name)
+    if delayed:
+        names = [key(path.name) for path in ordered]
+        if any(names.index(key(name)) < names.index("ufs_mt6853") for name in delayed):
+            raise ValueError("SCPSYS dependency loads before the UFS Recovery barrier")
     args.destination.mkdir(parents=True, exist_ok=True)
     for path in ordered:
         dest = args.destination / path.name

@@ -180,6 +180,10 @@ def pack(stock, kernel, dtb, loader, modules, watchdog_test=False, watchdog_andr
     if any(arg.startswith("rdinit=") for arg in cmdline):
         raise ValueError("base boot already has rdinit; resolve its init contract first")
     cmdline.append("rdinit=/cannon-init")
+    if watchdog_test or watchdog_android or watchdog_android_long or crypto_probe is not None:
+        if any(arg.startswith("mtk_wdt.cannon_panic_recovery=") for arg in cmdline):
+            raise ValueError("stock cmdline already configures panic recovery")
+        cmdline.append("mtk_wdt.cannon_panic_recovery=1")
     if native_expdb:
         if any(arg.startswith(("cannon.log_store=", "cannon.expdb=", "cannon.expdb_seconds=", "mtk_wdt.cannon_budget=")) for arg in cmdline):
             raise ValueError("base boot already selects native log diagnostics")

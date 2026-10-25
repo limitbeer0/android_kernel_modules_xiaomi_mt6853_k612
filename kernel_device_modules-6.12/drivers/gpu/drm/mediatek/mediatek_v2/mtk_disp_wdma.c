@@ -399,7 +399,9 @@ static irqreturn_t mtk_wdma_irq_handler(int irq, void *dev_id)
 			mtk_drm_crtc_dump(&wdma->mtk_crtc->base);
 			DDPMSG("new: %llu, old: %llu", underrun_new_ts, underrun_old_ts);
 			underrun_old_ts = underrun_new_ts;
-			mtk_smi_dbg_hang_detect("wdma-underrun");
+			/* mtk-smi-dbg provider is not configured on Cannon. */
+			if (!IS_ENABLED(CONFIG_CANNON_BRINGUP))
+				mtk_smi_dbg_hang_detect("wdma-underrun");
 		}
 	}
 	if (val & BIT(2)) {

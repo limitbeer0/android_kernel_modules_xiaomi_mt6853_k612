@@ -1400,8 +1400,12 @@ void cmdq_util_dump_smi(void)
 #if !IS_ENABLED(CONFIG_VIRTIO_CMDQ)
 	int smi_hang;
 
-	smi_hang = mtk_smi_dbg_hang_detect("CMDQ");
-	cmdq_util_err("smi hang:%d", smi_hang);
+	if (!IS_ENABLED(CONFIG_CANNON_BRINGUP) || IS_REACHABLE(CONFIG_MTK_SMI_DEBUG)) {
+		smi_hang = mtk_smi_dbg_hang_detect("CMDQ");
+		cmdq_util_err("smi hang:%d", smi_hang);
+	} else {
+		cmdq_util_msg("optional SMI hang diagnostics not built");
+	}
 #endif
 #else
 	cmdq_util_err("[WARNING]not enable SMI dump now");
@@ -1609,6 +1613,11 @@ int cmdq_util_init(void)
 	}
 
 	cmdq_msg("%s core_num:%d", __func__, gce_core_num);
+	if (gce_core_num <= 0 || gce_core_num > ARRAY_SIZE(first_error_disable)) {
+		cmdq_err("invalid gce-core-num: %d", gce_core_num);
+		of_node_put(np);
+		return -EINVAL;
+	}
 
 	ret = of_property_read_u32_array(np, "cmdq-first-err-disable", first_error_disable, gce_core_num);
 	if (ret) {

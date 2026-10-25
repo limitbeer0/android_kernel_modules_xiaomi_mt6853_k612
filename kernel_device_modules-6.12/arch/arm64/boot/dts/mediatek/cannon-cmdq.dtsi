@@ -1,0 +1,14 @@
+// SPDX-License-Identifier: (GPL-2.0 OR MIT)
+// The 6.12 CMDQ utility layer requires one entry for each physical GCE.
+/ {
+	cmdq-config {
+		gce-core-num = <1>;
+		cmdq-first-err-disable = <0>;
+	};
+};
+
+&{/gce_mbox@10228000} {
+	// 6.12 mt6853.dtsi uses a hyphenated name and the same u16 tokens.
+	/delete-property/ default_tokens;
+	default-tokens = /bits/ 16 <700 701 702 703 704 710 711>;
+};

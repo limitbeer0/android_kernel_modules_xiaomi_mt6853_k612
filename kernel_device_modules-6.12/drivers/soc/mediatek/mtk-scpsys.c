@@ -1936,11 +1936,14 @@ int mtk_register_power_domains(struct platform_device *pdev,
 	struct scp_domain *scpd;
 	struct generic_pm_domain *genpd;
 	bool on = true;
+	bool preserve_boot = of_machine_is_compatible("xiaomi,cannon") &&
+		of_property_read_bool(pdev->dev.of_node,
+				      "mediatek,preserve-boot-power-state");
 
 	for (i = num - 1; i >= 0; i--) {
 		scpd = &scp->domains[i];
 		genpd = &scpd->genpd;
-		if (MTK_SCPD_CAPS(scpd, MTK_SCPD_DISABLE_INIT_ON) &&
+		if (!preserve_boot && MTK_SCPD_CAPS(scpd, MTK_SCPD_DISABLE_INIT_ON) &&
 			(scpsys_pwr_ack_2nd_is_on(scpd))) {
 			on = WARN_ON(genpd->power_off(genpd) < 0);
 			dev_notice(&pdev->dev, "disable not reset power_domain:%s, on:%d\n",
@@ -1955,6 +1958,24 @@ int mtk_register_power_domains(struct platform_device *pdev,
 		if (MTK_SCPD_CAPS(scpd, MTK_SCPD_BYPASS_CLK))
 			bypass_first_cg_off = true;
 
+		if (preserve_boot) {
+			/* Adopt the LK state without resetting SRAM/bus protection or
+			 * powering every unused multimedia domain on during bring-up.
+			 * Keep adopted on-domains on: their clock/regulator reference
+			 * counts were not acquired by scpsys_power_on(). Domains which
+			 * start off still use the normal power-on path on first use.
+			 */
+			on = scpd->data->sta_mask && scpsys_sta_is_on(scpd) > 0 &&
+				scpsys_sta_2nd_is_on(scpd) > 0;
+			if (on)
+				genpd->flags |= GENPD_FLAG_ALWAYS_ON;
+			pm_genpd_init(genpd, NULL, !on);
+			dev_info(&pdev->dev, "cannon: adopted %s boot state %s\n",
+				 genpd->name, on ? "on (held)" : "off");
+			bypass_first_cg_off = false;
+			continue;
+		}
+
 		/*
 		 * Initially turn on all domains to make the domains usable
 		 * with !CONFIG_PM and to get the hardware in sync with the
@@ -1966,7 +1987,7 @@ int mtk_register_power_domains(struct platform_device *pdev,
 		else {
 			ret = genpd->power_on(genpd);
 			on = !WARN_ON(ret < 0);
-			if (ret)
+			if (ret && !IS_ENABLED(CONFIG_CANNON_BRINGUP))
 				clkchk_external_dump();
 		}
 
@@ -2888,12 +2909,18 @@ static struct platform_driver scpsys_drv = {
 
 static int __init scpsys_init(void)
 {
+	/* Cannon uses the MT6853 platform module. The common kernel already
+	 * owns the legacy mtk-scpsys driver name; this module supplies helpers.
+	 */
+	if (IS_ENABLED(CONFIG_CANNON_BRINGUP))
+		return 0;
 	return platform_driver_register(&scpsys_drv);
 }
 
 static void __exit scpsys_exit(void)
 {
-	platform_driver_unregister(&scpsys_drv);
+	if (!IS_ENABLED(CONFIG_CANNON_BRINGUP))
+		platform_driver_unregister(&scpsys_drv);
 }
 
 arch_initcall(scpsys_init);

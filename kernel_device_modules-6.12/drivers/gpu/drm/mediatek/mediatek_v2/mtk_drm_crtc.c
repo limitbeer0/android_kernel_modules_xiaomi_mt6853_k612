@@ -468,7 +468,8 @@ unsigned int mtk_drm_crtc_check_ovl_status(struct drm_crtc *crtc, struct mtk_cmd
 
 				if (unlikely(!called)) {
 					called = true;
-					mtk_smi_dbg_dump_for_disp();
+					if (!IS_ENABLED(CONFIG_CANNON_BRINGUP))
+						mtk_smi_dbg_dump_for_disp();
 				}
 			}
 		}
@@ -7587,7 +7588,8 @@ static void mtk_crtc_update_hrt_state(struct drm_crtc *crtc,
 				/* Re-enable mminfra funnel */
 				mtk_dbgtp_set_mminfra_funnel(true);
 				/* When dump finished, release stop, let other could trigger start */
-				mtk_set_mmmc_rg(2, 3, 0x18, 0x1, 0xffff);
+				if (!IS_ENABLED(CONFIG_CANNON_BRINGUP))
+					mtk_set_mmmc_rg(2, 3, 0x18, 0x1, 0xffff);
 			}
 			/* Re-enable trace funnel */
 			mtk_dbgtp_set_trace_top_funnel(true);
@@ -9492,12 +9494,14 @@ static int _mtk_crtc_cmdq_smi_info_dump(void *data)
 		if (ret < 0)
 			DDPPR_ERR("wait %s fail, ret=%d\n", __func__, ret);
 
-		mmdvfs_stop_record();
-		mmqos_stop_record();
-
-		mtk_smi_dbg_hang_detect("disp_underrun");
-		mmqos_hrt_dump();
-		mmdvfs_debug_status_dump(NULL);
+		/* These vendor debug providers are not configured on Cannon. */
+		if (!IS_ENABLED(CONFIG_CANNON_BRINGUP)) {
+			mmdvfs_stop_record();
+			mmqos_stop_record();
+			mtk_smi_dbg_hang_detect("disp_underrun");
+			mmqos_hrt_dump();
+			mmdvfs_debug_status_dump(NULL);
+		}
 		if (vdisp_func.analysis)
 			vdisp_func.analysis();
 		atomic_set(&mtk_crtc->smi_info_dump_event, 0);
@@ -17750,8 +17754,10 @@ void mtk_drm_crtc_suspend(struct drm_crtc *crtc)
 	if ((priv->data->mmsys_id == MMSYS_MT6993) &&
 			(priv->mtk_dbgtp_sta.fifo_mon_en[0]) && (index == 0)) {
 		/* Force trigger stop when suspend for fifo mon WA */
-		mtk_set_mmmc_rg(2, 3, 0x14, 0x1, 0xffff);
-		mtk_set_mmmc_rg(2, 3, 0x18, 0x1, 0xffff);
+		if (!IS_ENABLED(CONFIG_CANNON_BRINGUP)) {
+			mtk_set_mmmc_rg(2, 3, 0x14, 0x1, 0xffff);
+			mtk_set_mmmc_rg(2, 3, 0x18, 0x1, 0xffff);
+		}
 	}
 
 	mtk_drm_crtc_wait_blank(mtk_crtc);

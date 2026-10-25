@@ -4268,7 +4268,8 @@ static int __maybe_unused mtk_smi_larb_resume(struct device *dev, enum smi_ctrl_
 	smi_pd_ctrl_notify_on(larb->pd_id);
 	if (!readl_relaxed(larb->base + SMI_LARB_SW_FLAG) && (ctrl_type == SMI_CTRL)) {
 		dev_notice(dev, "write dummy fail\n");
-		clkchk_external_dump();
+		if (!IS_ENABLED(CONFIG_CANNON_BRINGUP))
+			clkchk_external_dump();
 		aee_kernel_exception("smi", "larb%u write dummy fail", larb->larbid);
 		smi_ut_result |= 1;
 	}
@@ -6066,7 +6067,8 @@ static int __maybe_unused mtk_smi_common_resume(struct device *dev, enum smi_ctr
 	smi_pd_ctrl_notify_on(common->pd_id);
 	if (!readl_relaxed(common->base + SMI_DUMMY) && (ctrl_type == SMI_CTRL)) {
 		dev_notice(dev, "write dummy fail\n");
-		clkchk_external_dump();
+		if (!IS_ENABLED(CONFIG_CANNON_BRINGUP))
+			clkchk_external_dump();
 		aee_kernel_exception("smi", "comm%u write dummy fail", common->commid);
 		smi_ut_result |= 1;
 	}

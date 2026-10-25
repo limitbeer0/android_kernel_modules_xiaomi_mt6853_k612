@@ -352,7 +352,16 @@ static int mt6853_scpsys_probe(struct platform_device *pdev)
 	const struct scp_soc_data *soc;
 	struct scp *scp;
 	struct genpd_onecell_data *pd_data;
+	struct resource *res;
 	int i, ret;
+
+	/* The 4.14 clock-provider node shares this compatible but maps
+	 * infracfg first. Never apply SPM offsets to that legacy register list.
+	 */
+	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
+	if (!res || res->start != 0x10006000 || resource_size(res) < 0x1000 ||
+	    !of_property_read_bool(pdev->dev.of_node, "#power-domain-cells"))
+		return dev_err_probe(&pdev->dev, -EINVAL, "SCPSYS requires the SPM power-domain binding\n");
 
 	soc = of_device_get_match_data(&pdev->dev);
 

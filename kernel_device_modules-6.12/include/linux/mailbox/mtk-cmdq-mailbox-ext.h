@@ -465,7 +465,7 @@ s32 cmdq_pkt_hw_trace(struct cmdq_pkt *pkt, const u16 event_id);
 s32 cmdq_pkt_set_capability(struct cmdq_pkt *pkt);
 s32 cmdq_thread_set_vm(struct cmdq_thread *thread);
 
-#if IS_ENABLED(CONFIG_MMPROFILE)
+#if IS_ENABLED(CONFIG_CMDQ_MMPROFILE_SUPPORT)
 void cmdq_mmp_wait(struct mbox_chan *chan, void *pkt);
 #endif
 

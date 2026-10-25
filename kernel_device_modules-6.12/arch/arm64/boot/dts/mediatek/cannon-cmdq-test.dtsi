@@ -1,0 +1,8 @@
+// SPDX-License-Identifier: (GPL-2.0 OR MIT)
+// Include only in a diagnostic DTB. Thread23 is unused without DRM/SMI clients.
+/ {
+	cannon-cmdq-probe {
+		compatible = "xiaomi,cannon-cmdq-probe";
+		mboxes = <0x52 23 0 1>;
+	};
+};

@@ -1,0 +1,65 @@
+// SPDX-License-Identifier: GPL-2.0-only
+// cannon display panel bring-up. Node layout mirrors the LK-patched runtime
+// FDT dumped from the running 4.14 device (live-fdt.bin, cmdline
+// LCM_name=dsi_vdo_j22_42_02_0a_lcm_drv): three j22 panel children under the
+// DSI node, reset on pio pin 86, dual-rail bias on pins 137/138. LK's
+// disp_lcm_fill_lcm_dts_phandle rewrites the dsi ports endpoint to the real
+// panel at boot, so keep all three nodes in the stock reg order. The LM36273
+// bias/backlight I2C client on i2c7 is likewise injected by the stock DTB,
+// not present in cannon-stock.dtsi.
+&{/dsi@14013000} {
+	panel1@0 {
+		compatible = "j22_43_03_0b,vdo";
+		reg = <0>;
+		reset-gpios = <&{/pinctrl} 86 0>;
+		bias-gpios = <&{/pinctrl} 137 0>, <&{/pinctrl} 138 0>;
+
+		port {
+			panel_in1: endpoint {
+				remote-endpoint = <&dsi_out>;
+			};
+		};
+	};
+
+	panel2@0 {
+		compatible = "j22_42_02_0a,vdo";
+		reg = <1>;
+		reset-gpios = <&{/pinctrl} 86 0>;
+		bias-gpios = <&{/pinctrl} 137 0>, <&{/pinctrl} 138 0>;
+
+		port {
+			panel_in2: endpoint {
+				remote-endpoint = <&dsi_out>;
+			};
+		};
+	};
+
+	panel3@0 {
+		compatible = "j22_43_03_0c,vdo";
+		reg = <2>;
+		reset-gpios = <&{/pinctrl} 86 0>;
+		bias-gpios = <&{/pinctrl} 137 0>, <&{/pinctrl} 138 0>;
+
+		port {
+			panel_in3: endpoint {
+				remote-endpoint = <&dsi_out>;
+			};
+		};
+	};
+
+	ports {
+		port {
+			dsi_out: endpoint {
+				remote-endpoint = <&panel_in2>;
+			};
+		};
+	};
+};
+
+&{/i2c7@11d01000} {
+	i2c_lcd_bias@11 {
+		compatible = "mediatek,i2c_lcd_bias";
+		reg = <0x11>;
+		status = "okay";
+	};
+};

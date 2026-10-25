@@ -49,10 +49,19 @@ ccflags-y += -I$(DEVICE_MODULES_PATH)/drivers/misc/mediatek/vcp/rv_v2
 
 # xaga: platform module wiring (alps BUILD.bazel mtk-cmdq-drv-ext; exports
 # cmdq_util_* for cmdq-platform-mt6895 / cmdq_helper_inf / mtk-mminfra-debug)
+ifeq ($(CONFIG_CANNON_BRINGUP),y)
+obj-$(CONFIG_MTK_CMDQ_MBOX_EXT) += mtk-cmdq-drv-ext.o
+else
 obj-m += mtk-cmdq-drv-ext.o
+endif
 mtk-cmdq-drv-ext-y := mtk-cmdq-mailbox-ext.o mtk-cmdq-helper-ext.o cmdq-util.o
 # alps-verbatim: cmdq_util_mbrain_buf_rec_latest declares nsec but never reads it
 $(obj)/cmdq-util.o: ccflags-y += -Wno-unused-but-set-variable
 
 # xaga: platform module wiring
+ifeq ($(CONFIG_CANNON_BRINGUP),y)
+obj-$(CONFIG_MTK_CMDQ_MBOX_EXT) += cmdq-platform-mt6853.o
+obj-$(CONFIG_MTK_CMDQ_MBOX_EXT) += cannon-cmdq-probe.o
+else
 obj-m += cmdq-platform-mt6895.o
+endif

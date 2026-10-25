@@ -2667,7 +2667,9 @@ void cmdq_thread_dump(struct mbox_chan *chan, struct cmdq_pkt *cl_pkt,
 /* if pc match end and irq flag on, dump irq status */
 	if (curr_pa == end_pa && irq) {
 		cmdq_util_msg("gic dump not support irq id:%u\n", cmdq->irq[mtk_cmdq]);
-		mt_irq_dump_status(cmdq->irq[mtk_cmdq]);
+		/* Cannon uses the common GIC driver without the vendor dump API. */
+		if (!IS_ENABLED(CONFIG_CANNON_BRINGUP))
+			mt_irq_dump_status(cmdq->irq[mtk_cmdq]);
 	}
 
 	if (inst_out)
@@ -3352,6 +3354,15 @@ static s32 cmdq_genpd_init(struct device *dev, struct cmdq *cmdq)
 
 	cmdq_msg("%s num:%d pm_domain:%p mminfra_pd:%d", __func__, genpd_num,
 		dev->pm_domain, cmdq->mminfra_all_on_pwr_idx);
+	/* MT6853 GCE is in infracfg and has no MMINFRA power domain. Its two
+	 * real clocks are managed by cmdq_mbox_enable/disable below.
+	 */
+	if (genpd_num == -ENOENT &&
+	    of_device_is_compatible(dev->of_node, "mediatek,mt6853-gce")) {
+		cmdq->pwr_control_by_mminfra = false;
+		cmdq->pd_mminfra_1 = NULL;
+		return 0;
+	}
 
 	if (genpd_num == -ENOENT || cmdq->mminfra_all_on_pwr_idx > 0) {
 		cmdq->pwr_control_by_mminfra = true;
@@ -3719,7 +3730,8 @@ static int cmdq_probe(struct platform_device *pdev)
 #if IS_ENABLED(CONFIG_MTK_CMDQ_MBOX_EXT)
 	cmdq_util_controller->track_ctrl(cmdq, cmdq->base_pa, false, hwid);
 #endif
-	cmdq->prebuilt_clt = cmdq_mbox_create(&pdev->dev, 0);
+	if (of_find_property(dev->of_node, "mboxes", NULL))
+		cmdq->prebuilt_clt = cmdq_mbox_create(&pdev->dev, 0);
 	/*
 	 * hw_trace_clt is only used when hw-trace is built in. The gce DT node
 	 * normally has a single mboxes entry, so requesting channel index 1
@@ -3765,11 +3777,13 @@ static int cmdq_probe(struct platform_device *pdev)
 		__func__, cmdq->smmu_v3_enabled, cmdq->sid, cmdq->axid, cmdq->tbu);
 #ifndef CMDQ_SKIP_BY_CMDQ_BUILT
 #if !IS_ENABLED(CONFIG_VIRTIO_CMDQ)
-	if (!of_parse_phandle_with_args(
+	if ((!IS_ENABLED(CONFIG_CANNON_BRINGUP) ||
+	     IS_REACHABLE(CONFIG_MTK_IOMMU_MISC_DBG)) && !of_parse_phandle_with_args(
 		dev->of_node, "iommus", "#iommu-cells", 0, &args)) {
 		mtk_iommu_register_fault_callback(
 			args.args[0], cmdq_iommu_fault_callback, cmdq, false);
-	} else if (!of_property_read_u32(
+	} else if ((!IS_ENABLED(CONFIG_CANNON_BRINGUP) ||
+		    IS_REACHABLE(CONFIG_MTK_IOMMU_MISC_DBG)) && !of_property_read_u32(
 		dev->of_node, "mtk,iommu-dma-axid", &port)) {
 		mtk_iommu_register_fault_callback(
 			port, cmdq_iommu_fault_callback, cmdq, false);
@@ -3861,11 +3875,13 @@ static struct platform_driver cmdq_drv = {
 
 static __init int cmdq_drv_init(void)
 {
-	u32 err = 0;
+	int err;
 
 	cmdq_msg("%s enter", __func__);
 
-	cmdq_util_init();
+	err = cmdq_util_init();
+	if (err)
+		return err;
 	err = platform_driver_register(&cmdq_drv);
 	if (err) {
 		cmdq_err("platform driver register failed:%d", err);
@@ -4163,7 +4179,8 @@ void cmdq_mbox_disable(void *chan)
 		cmdq_mtcmos_by_fast(cmdq, false);
 
 		// power
-		if (!cmdq->fast_mtcmos) {
+		if (!cmdq->fast_mtcmos &&
+		    (cmdq->pd_mminfra_1 || cmdq->pwr_control_by_mminfra)) {
 			int ret;
 
 			if (mminfra_power_cb && !mminfra_power_cb())

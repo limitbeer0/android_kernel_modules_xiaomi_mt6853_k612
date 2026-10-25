@@ -18,7 +18,12 @@ extern int mml_dbgtp_dump;
  *
  * @funcs:	DISP DBGTP driver functions.
  */
+#if IS_ENABLED(CONFIG_CANNON_BRINGUP) && !IS_REACHABLE(CONFIG_MTK_MML) && \
+	!IS_REACHABLE(CONFIG_MTK_MML_LEGACY)
+static inline void mml_dbgtp_register(const struct dbgtp_funcs *funcs) {}
+#else
 void mml_dbgtp_register(const struct dbgtp_funcs *funcs);
+#endif
 
 void mml_dbgtp_config(struct cmdq_pkt *pkt, u32 sysid,
 	phys_addr_t base_pa, void __iomem *base);

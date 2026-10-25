@@ -15257,7 +15257,9 @@ static irqreturn_t mtk_oddmr_check_framedone(int irq, void *dev_id)
 		mtk_drm_crtc_analysis(&(comp->mtk_crtc->base));
 		mtk_drm_crtc_dump(&(comp->mtk_crtc->base));
 		g_oddmr_dump_en = dump_en_tmp;
-		mtk_smi_dbg_hang_detect("oddmr err");
+		/* mtk-smi-dbg provider is not configured on Cannon. */
+		if (!IS_ENABLED(CONFIG_CANNON_BRINGUP))
+			mtk_smi_dbg_hang_detect("oddmr err");
 	}
 	ret = IRQ_HANDLED;
 	mtk_drm_top_clk_isr_put(comp);

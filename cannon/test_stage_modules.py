@@ -86,6 +86,29 @@ class StagingTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "Wrong kernel release"):
             self.run_stage()
 
+    def add_power_modules(self):
+        names = ["cannon-scpsys-core", "mtk-scpsys-mt6853", "consumer", "ufs-mt6853"]
+        (self.external / "modules.order").write_text("".join(n + ".o\n" for n in names))
+        for name in names:
+            (self.external / (name + ".ko")).write_bytes(name.encode())
+        self.depends.update({"cannon-scpsys-core": "provider",
+                             "mtk-scpsys-mt6853": "cannon-scpsys-core",
+                             "ufs-mt6853": "consumer"})
+
+    def test_power_probes_follow_ufs_and_its_functional_providers(self):
+        self.add_power_modules()
+        self.run_stage()
+        self.assertEqual((self.dest / "modules.load").read_text().splitlines(),
+                         ["provider.ko", "consumer.ko", "ufs-mt6853.ko",
+                          "cannon-scpsys-core.ko", "mtk-scpsys-mt6853.ko"])
+
+    def test_reject_dependency_that_powers_on_before_recovery_is_armed(self):
+        self.add_power_modules()
+        self.depends["consumer"] = "cannon-scpsys-core"
+        with self.assertRaisesRegex(ValueError, "before the UFS Recovery barrier"):
+            self.run_stage()
+        self.assertFalse(self.dest.exists())
+
 
 if __name__ == "__main__":
     unittest.main()

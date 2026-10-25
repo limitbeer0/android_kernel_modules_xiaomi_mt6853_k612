@@ -4,11 +4,12 @@
 set -euo pipefail
 ROOT=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 OUT=${OUT:-$ROOT/out-cannon}
+DTB=${DTB:-$OUT/cannon.dtb}
 LLVM_BIN=${LLVM_BIN:-/usr/lib/llvm-13/bin}
 test "$#" -eq 2 || { echo "Usage: $0 stock-boot.img output.img" >&2; exit 2; }
 python3 "$ROOT/cannon/check_config.py" "$OUT/.config"
 python3 "$ROOT/cannon/test_boot.py"
-python3 "$ROOT/cannon/verify_dt.py" "$OUT/cannon.dtb" \
+python3 "$ROOT/cannon/verify_dt.py" "$DTB" \
     "${STOCK_DTBO:-$(dirname -- "$1")/dtbo.img}"
 # Every packaging run starts with an empty staging directory. Retained for audit.
 STAGE=$(mktemp -d "$OUT/modules-stage.XXXXXXXX")
@@ -36,5 +37,5 @@ case "${ADB_ROOT:-0}" in
     *) echo "ADB_ROOT must be 0 or 1" >&2; exit 2 ;;
 esac
 python3 "$ROOT/cannon/pack_boot.py" "${wdt_args[@]}" --stock "$1" \
-    --kernel "$OUT/arch/arm64/boot/Image.gz" --dtb "$OUT/cannon.dtb" \
+    --kernel "$OUT/arch/arm64/boot/Image.gz" --dtb "$DTB" \
     --loader "$OUT/cannon-init" --modules "$STAGE" --output "$2"

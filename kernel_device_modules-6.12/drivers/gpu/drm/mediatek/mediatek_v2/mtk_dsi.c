@@ -4106,7 +4106,7 @@ void mtk_dsi_set_backlight(struct mtk_dsi *dsi)
 			disp_aal_notify_backlight_changed(comp, csc_bl[con_index], csc_nits[con_index], -1, 0);
 
 		comp = mtk_ddp_comp_sel_in_cur_crtc_path(mtk_crtc, MTK_DISP_CCORR, 0);
-		if (comp)
+		if (comp && IS_ENABLED(CONFIG_LEDS_BRIGHTNESS_CHANGED))
 			disp_ccorr_notify_backlight_changed(comp, csc_bl[con_index], csc_nits[con_index], false);
 
 		comp = mtk_ddp_comp_sel_in_cur_crtc_path(mtk_crtc, MTK_DISP_GAMMA, 0);
@@ -4458,7 +4458,8 @@ irqreturn_t mtk_dsi_irq_status(int irq, void *dev_id)
 			/* SW tigger stop for prevent for others start again and overwrite dump */
 			if ((priv->data->mmsys_id == MMSYS_MT6993) &&
 				(priv->mtk_dbgtp_sta.fifo_mon_en[0]) && (index == 0)) {
-				mtk_set_mmmc_rg(2, 3, 0x14, 0x1, 0xffff);
+				if (!IS_ENABLED(CONFIG_CANNON_BRINGUP))
+					mtk_set_mmmc_rg(2, 3, 0x14, 0x1, 0xffff);
 				/* dump dbgtp regs */
 				mtk_dbgtp_dump();
 				/* Disable dbgtp */
@@ -4534,7 +4535,7 @@ irqreturn_t mtk_dsi_irq_status(int irq, void *dev_id)
 
 			/* could dump SMI register while dsi not attached to CRTC */
 #if defined(DRM_DSI_UNDERRUN_AEE)
-			if (aee_cooldown &&
+			if (!IS_ENABLED(CONFIG_CANNON_BRINGUP) && aee_cooldown &&
 			    (!dsi->driver_data->smi_dbg_disable &&
 			    mtk_drm_helper_get_opt(priv->helper_opt, MTK_DRM_OPT_DSI_UNDERRUN_AEE)))
 				mtk_smi_dbg_hang_detect("dsi-underrun");
@@ -4560,7 +4561,7 @@ irqreturn_t mtk_dsi_irq_status(int irq, void *dev_id)
 
 			mtk_disp_clr_debug_deteriorate();
 
-#if !IS_ENABLED(CONFIG_MTK_EMI_LEGACY)
+#if !IS_ENABLED(CONFIG_MTK_EMI_LEGACY) && !IS_ENABLED(CONFIG_CANNON_BRINGUP)
 			mtk_emiisu_record_off();
 #endif
 

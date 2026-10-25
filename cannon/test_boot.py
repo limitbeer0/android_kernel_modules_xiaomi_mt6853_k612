@@ -146,6 +146,16 @@ class BootFormatTests(unittest.TestCase):
         self.assertEqual(read_cpio(cpio)["cannon-watchdog-test"][1], b"A")
         self.assertNotIn("cannon.log_store=1", boot_parts(self.build())[0]["cmdline"])
 
+    def test_panic_recovery_is_enabled_for_each_diagnostic_mode_only(self):
+        option = "mtk_wdt.cannon_panic_recovery=1"
+        self.assertNotIn(option, boot_parts(self.build())[0]["cmdline"].split())
+        for mode in ({"watchdog_test": True}, {"watchdog_android": True},
+                     {"watchdog_android_long": True}, {"crypto_probe": self.loader}):
+            with self.subTest(mode=tuple(mode)):
+                result = pack(self.stock, self.kernel, self.dtb, self.loader,
+                              self.modules, **mode)
+                self.assertEqual(boot_parts(result)[0]["cmdline"].split().count(option), 1)
+
     def test_adbroot_is_explicit_and_checks_kernel_support(self):
         with self.assertRaisesRegex(ValueError, "requires the bounded"):
             pack(self.stock, self.kernel, self.dtb, self.loader, self.modules, adb_root=True)

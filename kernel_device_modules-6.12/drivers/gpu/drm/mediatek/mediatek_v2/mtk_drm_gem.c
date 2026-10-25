@@ -461,6 +461,7 @@ int mtk_drm_gem_mmap(struct file *filp, struct vm_area_struct *vma)
 
 void mtk_drm_invalidate_slc(struct dma_buf *buf_hnd)
 {
+#if IS_REACHABLE(CONFIG_MTK_SLBC)
 	int gid;
 
 	gid = dma_buf_get_gid(buf_hnd);
@@ -470,10 +471,12 @@ void mtk_drm_invalidate_slc(struct dma_buf *buf_hnd)
 	DDPDBG("%s gid:%d\n", __func__, gid);
 	slbc_invalidate(ID_OVL_R, gid);
 	slbc_gid_release(ID_OVL_R, gid);
+#endif
 }
 
 void mtk_drm_validate_slc(struct dma_buf *buf_hnd)
 {
+#if IS_REACHABLE(CONFIG_MTK_SLBC)
 	struct slbc_gid_data slbc_data = {0};
 	int gid = 0;
 
@@ -486,6 +489,7 @@ void mtk_drm_validate_slc(struct dma_buf *buf_hnd)
 	slbc_data.sign = SLC_DATA_MAGIC;
 	slbc_gid_request(ID_OVL_R, &gid, &slbc_data);
 	slbc_validate(ID_OVL_R, gid);
+#endif
 }
 
 void mtk_drm_gem_ion_free_handle(struct dma_buf *buf_hnd,

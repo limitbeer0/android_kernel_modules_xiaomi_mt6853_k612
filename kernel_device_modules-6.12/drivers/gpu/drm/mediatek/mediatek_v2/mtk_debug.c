@@ -651,7 +651,8 @@ void mtk_dump_mminfra_ck(void *_priv)
 {
 	struct mtk_drm_private *priv = _priv;
 
-	if (!priv)
+	/* MT6853 has no MMINFRA clock/debug block. */
+	if (!priv || IS_ENABLED(CONFIG_CANNON_BRINGUP))
 		return;
 
 	if (priv->data->mmsys_id == MMSYS_MT6989) {

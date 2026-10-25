@@ -26,6 +26,12 @@ obj-$(CONFIG_DRM_PANEL_L16_36_02_0B_DSC_VDO) += panel-l16-36-02-0b-dsc-vdo.o
 obj-$(CONFIG_DRM_PANEL_LEDS_KTZ8863A) += leds-ktz8863a.o
 obj-$(CONFIG_DRM_PANEL_LEDS_KTZ8863A) += leds-ktz8863a.o
 
+# cannon: j22 panels and LM36273 backlight, ported from 4.14.
+obj-$(CONFIG_DRM_PANEL_J22_42_02_0A_VDO) += panel_j22_42_02_0a_vdo.o
+obj-$(CONFIG_DRM_PANEL_J22_43_03_0B_VDO) += panel_j22_43_03_0b_vdo.o
+obj-$(CONFIG_DRM_PANEL_J22_43_03_0C_VDO) += panel_j22_43_03_0c_vdo.o
+obj-$(CONFIG_DRM_PANEL_LEDS_LM36273) += leds-lm36273.o
+
 ccflags-$(CONFIG_DRM_MEDIATEK_PANEL) += -I$(DEVICE_MODULES_PATH)/drivers/leds/
 
 # xaga: provides the __weak mtk_drm_gateic_set_backlight that leds-mtk-disp
@@ -35,6 +41,11 @@ ccflags-$(CONFIG_DRM_MEDIATEK_PANEL) += -I$(DEVICE_MODULES_PATH)/drivers/leds/
 # compile the main file, leaving mtk_drm_gateic_register /
 # mtk_gateic_match_lcm_list as unresolved symbols at insmod). "mediatek-drm-
 # gateic" matches the official 5.10 (xagaforge) name and alps mgk_64.bzl.
+# cannon: skipped. The j22 panels are direct mipi_dsi/drm_panel drivers and
+# need neither the gateic composite nor the LCM panel-drv framework; the
+# gateic sources also assume CONFIG_DRM_MEDIATEK_PANEL externs instead of the
+# __weak fallbacks.
+ifneq ($(CONFIG_CANNON_BRINGUP),y)
 obj-m += mediatek-drm-gateic.o
 mediatek-drm-gateic-y := mtk_drm_panel_i2c.o \
 	mtk_drm_gateic_rt4801h.o \
@@ -57,3 +68,4 @@ mediatek-drm-panel-drv-y := mtk_drm_panel_drv.o \
 	mtk_drm_panel_helper_dpi.o \
 	mtk_drm_panel_helper_dbi.o \
 	mtk_round_corner/mtk_drm_rc.o
+endif

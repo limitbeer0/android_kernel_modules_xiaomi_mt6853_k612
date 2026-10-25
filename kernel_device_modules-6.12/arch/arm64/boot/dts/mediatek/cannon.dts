@@ -3,6 +3,9 @@
 // This is a first-stage port: unsupported multimedia nodes are not evidence of
 // working 6.12 drivers. Keep numeric phandles/clock IDs stable during bring-up.
 /include/ "cannon-stock.dtsi"
+/include/ "cannon-cmdq.dtsi"
+/include/ "cannon-mm-providers.dtsi"
+/include/ "cannon-display.dtsi"
 
 &{/} {
 	model = "Xiaomi Redmi Note 9 5G (cannon) - 6.12 bring-up";

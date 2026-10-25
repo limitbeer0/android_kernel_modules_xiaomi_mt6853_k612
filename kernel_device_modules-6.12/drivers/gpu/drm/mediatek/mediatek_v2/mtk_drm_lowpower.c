@@ -521,6 +521,9 @@ static void mtk_drm_adjust_cpu_freq(struct drm_crtc *crtc, bool bind,
 	int ret = 0, i = 0, detail = 0, j = 0, retry_cnt = 5, crtc_id;
 	bool updated = false;
 
+	if (!IS_ENABLED(CONFIG_CPU_FREQ))
+		return;
+
 	if (count == 0 || cpus == NULL ||
 		idlemgr_ctx->priv.cpu_freq == 0)
 		return;
@@ -1186,8 +1189,11 @@ static void mtk_drm_idlemgr_enter_idle_nolock(struct drm_crtc *crtc)
 	if ((priv->data->mmsys_id == MMSYS_MT6993) &&
 			(priv->mtk_dbgtp_sta.fifo_mon_en[0]) && (index == 0)) {
 		/* Force trigger stop when suspend for fifo mon WA */
-		mtk_set_mmmc_rg(2, 3, 0x14, 0x1, 0xffff);
-		mtk_set_mmmc_rg(2, 3, 0x18, 0x1, 0xffff);
+		/* mm_monitor provider is not configured on Cannon. */
+		if (!IS_ENABLED(CONFIG_CANNON_BRINGUP)) {
+			mtk_set_mmmc_rg(2, 3, 0x14, 0x1, 0xffff);
+			mtk_set_mmmc_rg(2, 3, 0x18, 0x1, 0xffff);
+		}
 	}
 
 	if (mode)
