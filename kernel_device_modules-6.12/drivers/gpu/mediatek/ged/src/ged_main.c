@@ -6,6 +6,7 @@
 #include <linux/cdev.h>
 #include <linux/delay.h>
 #include <linux/device.h>
+#include <linux/fdtable.h>
 #include <linux/fs.h>
 #include <linux/hardirq.h>
 #include <linux/init.h>
@@ -221,14 +222,21 @@ static long ged_dispatch(struct file *pFile,
 		if (GED_BRIDGE_COMMAND_GE_ALLOC ==
 				GED_GET_BRIDGE_ID(
 				psBridgePackageKM->ui32FunctionID)) {
-			inputBufferSize = sizeof(int) +
-			sizeof(uint32_t) * GE_ALLOC_STRUCT_NUM;
-			// hardcode region_num = GE_ALLOC_STRUCT_NUM,
-			// need check input buffer size
-			if (psBridgePackageKM->i32InBufferSize <
-				inputBufferSize) {
-				GED_LOGE("Failed to region_num, it must be %d\n",
-					GE_ALLOC_STRUCT_NUM);
+			/* The stock Cannon gralloc has 18 regions; newer users have
+			 * 22. Bound the copy to a complete known layout, then check
+			 * the copied count as well rather than trusting userspace.
+			 */
+			if (psBridgePackageKM->i32OutBufferSize !=
+				sizeof(struct GED_BRIDGE_OUT_GE_ALLOC)) {
+				ret = -EINVAL;
+				goto dispatch_exit;
+			}
+			if (inputBufferSize != sizeof(struct GED_BRIDGE_IN_GE_ALLOC) +
+				sizeof(uint32_t) * GE_ALLOC_STRUCT_NUM &&
+				inputBufferSize != sizeof(struct GED_BRIDGE_IN_GE_ALLOC) +
+				sizeof(uint32_t) * GE_ALLOC_STRUCT_NUM_LEGACY) {
+				GED_LOGE("Invalid GE_ALLOC input size: %d\n", inputBufferSize);
+				ret = -EINVAL;
 				goto dispatch_exit;
 			}
 		}
@@ -242,6 +250,18 @@ static long ged_dispatch(struct file *pFile,
 			inputBufferSize) != 0) {
 			GED_LOGE("Failed to ged_copy_from_user\n");
 			goto dispatch_exit;
+		}
+		if (GED_BRIDGE_COMMAND_GE_ALLOC ==
+			GED_GET_BRIDGE_ID(psBridgePackageKM->ui32FunctionID)) {
+			struct GED_BRIDGE_IN_GE_ALLOC *alloc_in = pvIn;
+
+			if (!ged_ge_region_num_valid(alloc_in->region_num) ||
+				inputBufferSize != sizeof(*alloc_in) +
+				sizeof(uint32_t) * alloc_in->region_num) {
+				GED_LOGE("GE_ALLOC region count does not match its input size\n");
+				ret = -EINVAL;
+				goto dispatch_exit;
+			}
 		}
 
 		pvOut = kzalloc(psBridgePackageKM->i32OutBufferSize,
@@ -372,6 +392,12 @@ static long ged_dispatch(struct file *pFile,
 
 		if (ged_copy_to_user(psBridgePackageKM->pvParamOut,
 			pvOut, psBridgePackageKM->i32OutBufferSize) != 0) {
+			/* A newly allocated metadata fd was never delivered. */
+			if (GED_GET_BRIDGE_ID(psBridgePackageKM->ui32FunctionID) ==
+				GED_BRIDGE_COMMAND_GE_ALLOC &&
+				((struct GED_BRIDGE_OUT_GE_ALLOC *)pvOut)->ge_fd >= 0)
+				close_fd(((struct GED_BRIDGE_OUT_GE_ALLOC *)pvOut)->ge_fd);
+			ret = -EFAULT;
 			goto dispatch_exit;
 		}
 	}

@@ -109,34 +109,24 @@ int ged_ge_alloc(int region_num, uint32_t *region_sizes)
 {
 	unsigned long flags;
 	int fd;
+	int ret;
 	int i;
-	struct GEEntry *entry =
-		(struct GEEntry *)kmem_cache_zalloc(gPoolCache, GFP_KERNEL);
+	struct GEEntry *entry;
+
+	if (!ged_ge_region_num_valid(region_num) || !region_sizes)
+		return -EINVAL;
+	for (i = 0; i < region_num; ++i) {
+		if (!region_sizes[i] || region_sizes[i] > GE_MAX_REGION_SIZE)
+			return -EINVAL;
+	}
+
+	entry = kmem_cache_zalloc(gPoolCache, GFP_KERNEL);
 
 	if (!entry) {
 		GED_PDEBUG("alloc entry fail, size:%zu\n",
 			sizeof(struct GEEntry));
-		goto err_entry;
+		return -ENOMEM;
 	}
-
-	fd = entry->alloc_fd = get_unused_fd_flags(O_CLOEXEC);
-
-	if (entry->alloc_fd < 0) {
-		GED_PDEBUG("get_unused_fd_flags() return %d\n",
-			entry->alloc_fd);
-		goto err_fd;
-	}
-
-	entry->file = anon_inode_getfile("gralloc_extra",
-		&GEEntry_fops, entry, 0);
-
-	if (IS_ERR(entry->file)) {
-		GED_PDEBUG("anon_inode_getfile() fail\n");
-		goto err_entry_file;
-	}
-
-	/* Avoid using the unpredictable value for Fuzzing */
-	region_num = GE_ALLOC_STRUCT_NUM;
 
 	entry->region_num = region_num;
 	entry->data =
@@ -145,19 +135,28 @@ int ged_ge_alloc(int region_num, uint32_t *region_sizes)
 	if (!entry->data) {
 		GED_PDEBUG("alloc data fail, size:%zu\n",
 			sizeof(void *) * region_num);
-		goto err_kmalloc;
+		ret = -ENOMEM;
+		goto err_entry;
 	}
 	entry->region_sizes = (uint32_t *)entry->data;
 	entry->region_data = (uint32_t **)(entry->region_sizes + region_num);
-	for (i = 0; i < region_num; ++i) {
-		// check region_sizes parameter
-		if (region_sizes[i] <= 0 ||
-			region_sizes[i] > GE_MAX_REGION_SIZE) {
-			GED_PDEBUG("check size fail region_sizes[%d]:%u\n",
-				i, region_sizes[i]);
-			goto err_parameter;
-		}
+	for (i = 0; i < region_num; ++i)
 		entry->region_sizes[i] = region_sizes[i];
+
+	fd = entry->alloc_fd = get_unused_fd_flags(O_CLOEXEC);
+	if (fd < 0) {
+		ret = fd;
+		goto err_data;
+	}
+
+	/* Create the file only after its release-visible state is complete.
+	 * After this succeeds, only list insertion and fd_install remain.
+	 */
+	entry->file = anon_inode_getfile("gralloc_extra", &GEEntry_fops, entry, 0);
+	if (IS_ERR(entry->file)) {
+		ret = PTR_ERR(entry->file);
+		put_unused_fd(fd);
+		goto err_data;
 	}
 
 	entry->unique_id = gen_unique_id();
@@ -170,15 +169,11 @@ int ged_ge_alloc(int region_num, uint32_t *region_sizes)
 
 	return fd;
 
-err_parameter:
+err_data:
 	kfree(entry->data);
-err_kmalloc:
-err_entry_file:
-	put_unused_fd(entry->alloc_fd);
-err_fd:
-	kmem_cache_free(gPoolCache, entry);
 err_entry:
-	return -1;
+	kmem_cache_free(gPoolCache, entry);
+	return ret;
 }
 
 static void dump_ge_regions(struct GEEntry *entry)
@@ -357,7 +352,16 @@ int ged_bridge_ge_alloc(
 {
 	psALLOC_OUT->ge_fd =
 		ged_ge_alloc(psALLOC_IN->region_num, psALLOC_IN->region_sizes);
-	psALLOC_OUT->eError = !!(psALLOC_OUT->ge_fd) ? GED_OK : GED_ERROR_OOM;
+	if (psALLOC_OUT->ge_fd >= 0)
+		psALLOC_OUT->eError = GED_OK;
+	else if (psALLOC_OUT->ge_fd == -ENOMEM)
+		psALLOC_OUT->eError = GED_ERROR_OOM;
+	else if (psALLOC_OUT->ge_fd == -EMFILE || psALLOC_OUT->ge_fd == -ENFILE)
+		psALLOC_OUT->eError = GED_ERROR_OUT_OF_FD;
+	else if (psALLOC_OUT->ge_fd == -EINVAL)
+		psALLOC_OUT->eError = GED_ERROR_INVALID_PARAMS;
+	else
+		psALLOC_OUT->eError = GED_ERROR_FAIL;
 	return 0;
 }
 

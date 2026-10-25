@@ -10,6 +10,8 @@ required = {
     "SECURITY_SELINUX": "y",
     "PSTORE": "y", "PSTORE_CONSOLE": "y", "PSTORE_PMSG": "y", "PSTORE_RAM": "y",
     "BLK_DEV_INITRD": "y", "RD_GZIP": "y", "LTO_NONE": "y",
+    "EXTRA_FIRMWARE": '"valhall-1691526.wa"',
+    "EXTRA_FIRMWARE_DIR": '"firmware"',
     "COMMON_CLK_MT6853": "m", "PINCTRL_MT6853": "m",
     "DEVICE_MODULES_MTK_PMIC_WRAP": "m",
     "DEVICE_MODULES_MFD_MT6397": "m", "REGULATOR_MT6359P": "m",

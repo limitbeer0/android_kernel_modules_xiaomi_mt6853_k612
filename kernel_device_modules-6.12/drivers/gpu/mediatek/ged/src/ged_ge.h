@@ -13,7 +13,14 @@
  * /vendor/mediatek/proprietary/hardware/gralloc_extra/ge_misc.cpp
  */
 #define GE_ALLOC_STRUCT_NUM 22
+#define GE_ALLOC_STRUCT_NUM_LEGACY 18
 #define GE_MAX_REGION_SIZE 8192
+
+static inline bool ged_ge_region_num_valid(int region_num)
+{
+	return region_num == GE_ALLOC_STRUCT_NUM ||
+		region_num == GE_ALLOC_STRUCT_NUM_LEGACY;
+}
 
 GED_ERROR ged_ge_init(void);
 int ged_ge_exit(void);
