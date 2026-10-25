@@ -57,9 +57,29 @@
 };
 
 &{/i2c7@11d01000} {
+	// The 6.12 mt65xx i2c driver has no entry for the legacy
+	// "mediatek,i2c" compatible; mt6853 uses the mt6873-generation IP.
+	compatible = "mediatek,mt6853-i2c";
+	#address-cells = <1>;
+	#size-cells = <0>;
+
 	i2c_lcd_bias@11 {
 		compatible = "mediatek,i2c_lcd_bias";
 		reg = <0x11>;
 		status = "okay";
 	};
+};
+
+// dispsys_config's stock clock list starts with <0x49 0xc>, the legacy
+// SCPSYS MM clock. cannon-mm-providers.dtsi rewrote the power-controller
+// for the 6.12 power-domain binding and dropped its #clock-cells, so
+// of_count_phandle_with_args fails and the DRM top-clock list ends up
+// empty — with top_clk_ref at 0 every DSI/RDMA IRQ is dropped and the
+// first-enable wait never completes (test58). Keep the three real
+// mmsys_config clocks (clk-mt6853-mm registers this provider; the IDs are
+// CLK_MM_DISP_26M/CLK_MM_APB_BUS/CLK_MM_DISP_MUTEX0, matching the
+// reference mt6853.dtsi).
+&{/dispsys_config@14000000} {
+	clocks = <0x82 0x19 0x82 0x1 0x82 0x0>;
+	clock-num = <3>;
 };

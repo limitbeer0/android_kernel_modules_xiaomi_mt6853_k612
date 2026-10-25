@@ -10,6 +10,8 @@ CFLAGS_md_cooling.o := -I$(DEVICE_MODULES_PATH)/drivers/thermal
 CFLAGS_soc_temp_lvts.o := -I$(DEVICE_MODULES_PATH)/drivers/thermal
 CFLAGS_vtskin_temp.o := -I$(DEVICE_MODULES_PATH)/drivers/thermal
 CFLAGS_thermal_trace.o := -I$(DEVICE_MODULES_PATH)/drivers/thermal/mediatek
+# cannon: thermal_interface needs the gpufreq v2 API declarations
+CFLAGS_thermal_interface.o := -I$(DEVICE_MODULES_PATH)/drivers/thermal -I$(srctree)/drivers/thermal -I$(DEVICE_MODULES_PATH)/drivers/gpu/mediatek/gpufreq/v2/include
 
 ifneq ($(CONFIG_MTK_GPU_LEGACY),y)
 ifneq ($(CONFIG_MTK_TINYSYS_GPUEB_SUPPORT),)
@@ -29,7 +31,7 @@ obj-$(CONFIG_MTK_SOC_THERMAL)	+= soc_temp.o
 
 obj-$(CONFIG_MTK_THERMAL_IPI)	+= thermal_ipi.o
 
-#obj-$(CONFIG_MTK_THERMAL_INTERFACE)	+= thermal_interface.o
+obj-$(CONFIG_MTK_THERMAL_INTERFACE)	+= thermal_interface.o
 
 #obj-$(CONFIG_MTK_VTSKIN_THERMAL)	+= vtskin_temp.o
 

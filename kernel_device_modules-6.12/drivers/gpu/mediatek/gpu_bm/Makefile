@@ -12,12 +12,13 @@
 #
 
 ccflags-y += -I$(DEVICE_MODULES_PATH)/drivers/misc/mediatek/sspm/v2/
+ccflags-y += -I$(DEVICE_MODULES_PATH)/drivers/misc/mediatek/sspm/v3/
 ccflags-y += -I$(DEVICE_MODULES_PATH)/drivers/misc/mediatek/qos/
 ccflags-y += -I$(DEVICE_MODULES_PATH)/drivers/gpu/mediatek/gpufreq/
 ccflags-y += -I$(DEVICE_MODULES_PATH)/drivers/gpu/mediatek/ged/include/
 ccflags-y += -I$(DEVICE_MODULES_PATH)/drivers/gpu/mediatek/
 
-ifeq ($(CONFIG_MTK_GPU_SUPPORT),y)
+ifneq ($(filter y m, $(CONFIG_MTK_GPU_SUPPORT)),)
 ccflags-$(CONFIG_MTK_QOS_FRAMEWORK) += -DMTK_QOS_FRAMEWORK
 $(info *GPU BM QoS 2.0 QOS Framework defined)
 endif
@@ -27,8 +28,8 @@ ccflags-y += -DMTK_SCMI
 $(info *GPU BM QoS 2.0 SCMI defined)
 endif
 
-#obj-$(CONFIG_MTK_GPU_SUPPORT) += mtk_gpu_qos.o
-#mtk_gpu_qos-y := gpu_bm.o
+obj-$(CONFIG_MTK_GPU_SUPPORT) += mtk_gpu_qos.o
+mtk_gpu_qos-y := gpu_bm.o
 
 #obj-$(CONFIG_MTK_GPU_SUPPORT) += mtk_gpu_qos_bringup.o
 #mtk_gpu_qos_bringup-y := gpu_bm_bringup.o

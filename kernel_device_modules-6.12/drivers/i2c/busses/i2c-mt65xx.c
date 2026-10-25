@@ -757,6 +757,11 @@ static const struct of_device_id mtk_i2c_of_match[] = {
 	{ .compatible = "mediatek,mt6577-i2c", .data = &mt6577_compat },
 	{ .compatible = "mediatek,mt6589-i2c", .data = &mt6589_compat },
 	{ .compatible = "mediatek,mt6873-i2c", .data = &mt6873_compat },
+	/* cannon: mt6853 shares the mt6873-generation i2c IP (regs v2 +
+	 * apdma v1, 36-bit dma); the 4.14 vendor driver used the same layout.
+	 * The stock DT carries the legacy "mediatek,i2c" compatible, which is
+	 * remapped in cannon-display.dtsi. */
+	{ .compatible = "mediatek,mt6853-i2c", .data = &mt6873_compat },
 	{ .compatible = "mediatek,mt6879-i2c", .data = &mt6879_compat },
 	{ .compatible = "mediatek,mt6983-i2c", .data = &mt6983_compat },
 	{ .compatible = "mediatek,mt7622-i2c", .data = &mt7622_compat },

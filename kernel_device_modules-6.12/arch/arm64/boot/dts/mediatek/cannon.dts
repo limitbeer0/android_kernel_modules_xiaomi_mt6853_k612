@@ -6,6 +6,7 @@
 /include/ "cannon-cmdq.dtsi"
 /include/ "cannon-mm-providers.dtsi"
 /include/ "cannon-display.dtsi"
+/include/ "cannon-gpu.dtsi"
 
 &{/} {
 	model = "Xiaomi Redmi Note 9 5G (cannon) - 6.12 bring-up";

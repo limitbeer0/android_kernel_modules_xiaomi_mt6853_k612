@@ -78,6 +78,7 @@ ccflags-y += -I$(DEVICE_MODULES_PATH)/drivers/gpu/mediatek/gpueb
 ccflags-y += \
 		-I$(DEVICE_MODULES_PATH)/drivers/misc/mediatek/sspm/ \
 		-I$(DEVICE_MODULES_PATH)/drivers/misc/mediatek/sspm/v2 \
+		-I$(DEVICE_MODULES_PATH)/drivers/misc/mediatek/sspm/v3 \
 		-I$(DEVICE_MODULES_PATH)/drivers/misc/mediatek/qos/ \
 		-I$(DEVICE_MODULES_PATH)/drivers/gpu/mediatek/gpu_bm/
 
@@ -122,7 +123,7 @@ endif
 
 ged-$(CONFIG_SYNC_FILE) += src/ged_sync.o
 
-# obj-$(CONFIG_MTK_GPU_SUPPORT) += ged.o
+obj-$(CONFIG_MTK_GPU_SUPPORT) += ged.o
 
 # mtk_ged_mt6991-y := src/platform/ged_mt6991.o
 

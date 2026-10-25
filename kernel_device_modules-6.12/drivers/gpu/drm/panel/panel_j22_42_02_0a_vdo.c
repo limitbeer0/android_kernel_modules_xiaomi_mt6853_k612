@@ -436,16 +436,8 @@ static int panel_ext_reset(struct drm_panel *panel, int on)
 static int lcm_setbacklight_cmdq(void *dsi, dcs_write_gce cb,
 		void *handle, unsigned int level)
 {
-/*	char bl_tb0[] = {0x51, 0xFF};
-
-	bl_tb0[1] = level;
-
-	if (!cb)
-		return -1;
-
-	cb(dsi, handle, bl_tb0, ARRAY_SIZE(bl_tb0));*/
-
-	return 0;
+	/* This panel uses the external I2C backlight, not DCS 0x51. */
+	return lm36273_brightness_set(level);
 }
 
 static struct mtk_panel_params ext_params = {
@@ -468,9 +460,20 @@ static struct mtk_panel_params ext_params = {
 #endif
 };
 
+/* cannon: the j22 panels have no DCS backlight path — 4.14 kept
+ * lcm_setbacklight_cmdq commented out; brightness goes through the LM36273
+ * I2C IC (LK's own boot code calls lm36273_brightness_set), mirroring the
+ * l16/ktz8863a pattern. */
+static int lcm_setbacklight_i2c(struct drm_panel *panel, unsigned int level)
+{
+	return lm36273_brightness_set(level);
+}
+
 static struct mtk_panel_funcs ext_funcs = {
 	.reset = panel_ext_reset,
 	.set_backlight_cmdq = lcm_setbacklight_cmdq,
+	.set_backlight_i2c = lcm_setbacklight_i2c,
+	.setbacklight_control = lcm_setbacklight_i2c,
 };
 #endif
 
@@ -586,13 +589,18 @@ static int lcm_probe(struct mipi_dsi_device *dsi)
 	drm_panel_add(&ctx->panel);
 
 	ret = mipi_dsi_attach(dsi);
-	if (ret < 0)
+	if (ret < 0) {
 		drm_panel_remove(&ctx->panel);
+		return ret;
+	}
 
 #if defined(CONFIG_MTK_PANEL_EXT)
 	ret = mtk_panel_ext_create(dev, &ext_params, &ext_funcs, &ctx->panel);
-	if (ret < 0)
+	if (ret < 0) {
+		mipi_dsi_detach(dsi);
+		drm_panel_remove(&ctx->panel);
 		return ret;
+	}
 #endif
 
 	pr_info("%s-\n", __func__);
@@ -604,7 +612,9 @@ static void lcm_remove(struct mipi_dsi_device *dsi)
 {
 	struct lcm *ctx = mipi_dsi_get_drvdata(dsi);
 
-	mipi_dsi_detach(dsi);
+	/* Host teardown may already have detached this peripheral. */
+	if (dsi->attached)
+		mipi_dsi_detach(dsi);
 	drm_panel_remove(&ctx->panel);
 }
 

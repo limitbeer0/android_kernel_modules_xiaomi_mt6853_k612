@@ -227,6 +227,7 @@ static const int bl_level_remap[BL_LEVEL_MAX + 1] = {
 static struct LCM_led_i2c_read_write lcm_led_i2c_read_write = {0};
 
 static struct lm36273_led g_lm36273_led;
+static bool lm36273_level_valid;
 static struct lm36273_reg lm36273_regs_conf[] = {
 	{ LP36273_DISP_BC1, 0x60 },/* disable pwm*/
 	{ LP36273_DISP_BC2, 0x85 },/* disable dimming*/
@@ -256,8 +257,14 @@ int lm36273_reg_write_bytes(unsigned char addr, unsigned char value)
 	write_data[0] = addr;
 	write_data[1] = value;
 	ret = i2c_master_send(g_lm36273_led.client, write_data, 2);
-	if (ret < 0)
-		pr_err("lm36273 write data fail !!\n");
+	if (ret < 0) {
+		pr_err("lm36273 write data fail: %d\n", ret);
+		return ret;
+	}
+	if (ret != sizeof(write_data)) {
+		pr_err("lm36273 short write: %d\n", ret);
+		return -EIO;
+	}
 
 	return ret;
 }
@@ -341,31 +348,55 @@ EXPORT_SYMBOL(lm36273_bias_enable);
 
 int lm36273_brightness_set(int level)
 {
-	int tmp_bl = 0;
+	int tmp_bl;
+	int ret;
 
-	if (level < 0 || level > BL_LEVEL_MAX || level == g_lm36273_led.level)
-		return 0;
+	if (level < 0 || level > BL_LEVEL_MAX)
+		return -EINVAL;
+	if (!g_lm36273_led.client)
+		return -ENODEV;
+
+	mutex_lock(&g_lm36273_led.lock);
+	if (lm36273_level_valid && level == g_lm36273_led.level) {
+		ret = 0;
+		goto out;
+	}
 
 	tmp_bl = bl_level_remap[level];
-	mutex_lock(&g_lm36273_led.lock);
 	pr_debug("%s lsb:0x%x, msb:0x%x\n", __func__, tmp_bl & 0x7, tmp_bl >> 3);
-	lm36273_reg_write_bytes(LP36273_DISP_BB_LSB, tmp_bl & 0x7);
-	lm36273_reg_write_bytes(LP36273_DISP_BB_MSB, tmp_bl >> 3);
+	ret = lm36273_reg_write_bytes(LP36273_DISP_BB_LSB, tmp_bl & 0x7);
+	if (ret < 0)
+		goto out;
+	ret = lm36273_reg_write_bytes(LP36273_DISP_BB_MSB, tmp_bl >> 3);
+	if (ret < 0)
+		goto out;
 
-	if (level == 0 && g_lm36273_led.level != 0) {
-		/* disable BL and current sink*/
-		lm36273_reg_write_bytes(LP36273_DISP_BL_ENABLE, 0x0);
+	if (level == 0) {
+		/* disable BL and current sink */
+		ret = lm36273_reg_write_bytes(LP36273_DISP_BL_ENABLE, 0x0);
+		if (ret < 0)
+			goto out;
 		pr_debug("lm36273_brightness_set, close\n");
-	} else if (level > 0 && g_lm36273_led.level == 0) {
-		/* enable BL and current sink*/
-		lm36273_reg_write_bytes(LP36273_DISP_BL_ENABLE, 0x17);
-		lm36273_reg_write_bytes(LP36273_DISP_BC2, 0xcd);
+	} else if (!lm36273_level_valid || g_lm36273_led.level == 0) {
+		/* enable BL and current sink */
+		ret = lm36273_reg_write_bytes(LP36273_DISP_BL_ENABLE, 0x17);
+		if (ret < 0)
+			goto out;
+		ret = lm36273_reg_write_bytes(LP36273_DISP_BC2, 0xcd);
+		if (ret < 0)
+			goto out;
 		pr_debug("lm36273_brightness_set, enable level:%d\n", level);
 	}
 
+	/* Only cache a level after all register writes have succeeded. */
 	g_lm36273_led.level = level;
+	lm36273_level_valid = true;
+	ret = 0;
+out:
+	if (ret < 0)
+		lm36273_level_valid = false;
 	mutex_unlock(&g_lm36273_led.lock);
-	return 0;
+	return ret;
 }
 EXPORT_SYMBOL(lm36273_brightness_set);
 
@@ -533,6 +564,7 @@ static int lm36273_probe(struct i2c_client *client)
 	pr_debug("lm36273_probe: %s\n", client->name);
 	g_lm36273_led.client = client;
 	mutex_init(&g_lm36273_led.lock);
+	lm36273_level_valid = false;
 		pr_debug("lm36273_sysfs create: %s\n", client->name);
 	ret = sysfs_create_group(&client->dev.kobj, &lm36273_attr_group);
 	if (ret < 0) {

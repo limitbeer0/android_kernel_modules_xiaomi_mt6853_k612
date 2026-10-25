@@ -1,0 +1,37 @@
+// SPDX-License-Identifier: (GPL-2.0 OR MIT)
+// MT6853 v2_legacy/JM bindings from the 6.12 baseline. Preserve Cannon's
+// legacy clock selectors and PMIC supply phandles from the running 4.14 DT.
+&{/gpufreq} {
+	clocks = <0x3e 0xac>, <0x3e 0x2d>, <0x3e 0xab>, <0x7d 0>;
+	clock-names = "clk_mux", "clk_main_parent", "clk_sub_parent", "subsys_bg3d";
+};
+
+&{/syson@13fbf000} {
+	compatible = "mediatek,mt6853-mfgcfg", "mediatek,mfgcfg",
+		     "mediatek,mt6853-mfgsys", "syscon";
+};
+
+/ {
+	gpufreq_wrapper {
+		compatible = "mediatek,gpufreq_wrapper";
+		gpufreq-version = <2>;
+		dual-buck = <0>;
+		gpueb-support = <0>;
+		gpufreq-bringup = <0>;
+	};
+
+	gpufreq_mfg2 {
+		compatible = "mediatek,mt6853-mfg2", "mediatek,mfg2";
+		power-domains = <0x49 4>;
+	};
+
+	gpufreq_mfg3 {
+		compatible = "mediatek,mt6853-mfg3", "mediatek,mfg3";
+		power-domains = <0x49 5>;
+	};
+
+	gpufreq_mfg5 {
+		compatible = "mediatek,mt6853-mfg5", "mediatek,mfg5";
+		power-domains = <0x49 6>;
+	};
+};

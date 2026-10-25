@@ -11,7 +11,8 @@
 #include <linux/of_platform.h>
 #include <linux/types.h>
 #include <linux/proc_fs.h>
-#include <linux/cpumask.h>
+#include <linux/cpu.h> /* cannon: CPU_UP/get_cpu_device/add_cpu, no
+                * longer pulled in transitively in 6.12 */
 #include <linux/hrtimer.h>
 #include <linux/debugfs.h>
 #include <linux/uaccess.h>

@@ -240,10 +240,10 @@ static int g_gpufreq_mfg5_probe(struct platform_device *pdev)
 	return 0;
 }
 
-static int g_gpufreq_mfg_remove(struct platform_device *pdev)
+/* cannon: 6.12 platform_driver .remove returns void (CONFIG_WERROR) */
+static void g_gpufreq_mfg_remove(struct platform_device *pdev)
 {
 	pm_runtime_disable(&pdev->dev);
-	return 0;
 }
 
 static struct platform_driver g_mfg2_pdrv = {

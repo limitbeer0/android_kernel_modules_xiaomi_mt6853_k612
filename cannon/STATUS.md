@@ -1,5 +1,19 @@
 # Cannon 6.12 源码状态（2026-10-18）
 
+> **2026-10-25 test60 最新状态，覆盖下方历史记录**
+>
+> 使用 Clang/LLD 13，72 个 ko 放入基于 MIUI14 working boot 的 ramdisk。
+> gpufreq wrapper、MFG 时钟和 shader 电源域绑定已补齐；实机 gpufreq probe 成功，
+> GPU_ID=0x90930000，GPU reset 中断正常，Mali-G57 三核注册为 `/dev/mali0`（JM）。
+> DRM card0 / DSI-1 connected，但仍 disabled / Off，未证明显示扫描输出或完整 UI 启动。
+> SurfaceFlinger 创建 Mali context 失败；内核明确报告缺少 `valhall-1691526.wa`。
+> 面板 extension 的 devres 悬空链表、DSI attach 失败清理和 LM36273 背光回调已修复。
+> 源码构建、15 项 boot 镜像测试、官方 DTBO 合并及 GPU 电源/时钟断言通过。
+> test60 镜像 SHA256：`c141c702e4252a4ddffa9a0f182b0a63881ea47a56ef391635756835a724166c`。
+> 本记录时手机运行 test60 诊断镜像，600 秒有限看门狗到期后依靠已写入的 BCB 自动回 Recovery；
+> 此处不是“已恢复正常 boot”的声明。LK、Preloader、独立 DTBO 均未修改。
+> 详细来源、变更和验证边界见 `PROGRESS-20261025.md` 最后的 test59–60 章节。
+
 > **2026-10-25 08:35 最新状态（覆盖下方历史）**
 >
 > test51：普通页堆旧ION ABI已在6.12 DMA heaps上实测通过，64位及真实32位均PASS；见modules仓库cannon/ION.md。

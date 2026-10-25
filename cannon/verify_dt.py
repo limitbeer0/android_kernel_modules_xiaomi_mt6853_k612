@@ -57,6 +57,26 @@ def main():
                 raise SystemExit(f"{node} must use the MT6853 display power domain")
         if get(merged, "s", "/m4u@14016000", "compatible") != "mediatek,mt6853-m4u":
             raise SystemExit("Missing MT6853 IOMMU provider binding")
+        wrapper = "/gpufreq_wrapper"
+        if get(merged, "s", wrapper, "compatible") != "mediatek,gpufreq_wrapper":
+            raise SystemExit("Missing MT6853 gpufreq wrapper")
+        for prop, expected in (("gpufreq-version", "2"), ("gpueb-support", "0"),
+                               ("gpufreq-bringup", "0"), ("dual-buck", "0")):
+            if get(merged, "u", wrapper, prop) != expected:
+                raise SystemExit(f"Incorrect Cannon gpufreq setting: {prop}")
+        if get(merged, "x", "/gpufreq", "clocks") != "3e ac 3e 2d 3e ab 7d 0":
+            raise SystemExit("GPU clocks must exclude the old SCPSYS clock IDs")
+        if get(merged, "s", "/gpufreq", "clock-names") != "clk_mux clk_main_parent clk_sub_parent subsys_bg3d":
+            raise SystemExit("GPU clock names do not match the MT6853 driver")
+        if "mediatek,mt6853-mfgcfg" not in get(merged, "s", "/syson@13fbf000", "compatible").split():
+            raise SystemExit("Missing MT6853 MFG clock provider binding")
+        for index, domain in ((2, 4), (3, 5), (5, 6)):
+            node = f"/gpufreq_mfg{index}"
+            if get(merged, "x", node, "power-domains") != get(merged, "x", spm, "phandle") + f" {domain:x}":
+                raise SystemExit(f"{node} points at the wrong GPU power domain")
+        for supply, phandle in (("_vgpu-supply", "7e"), ("_vsram_gpu-supply", "7f")):
+            if get(merged, "x", "/gpufreq", supply) != phandle:
+                raise SystemExit(f"Stock GPU rail changed: {supply}")
         keys = "/pwrap@10026000/mt6359-pmic/cannon-pmic-keys"
         if get(merged, "s", keys, "compatible") != "mediatek,mt6359p-keys":
             raise SystemExit("PMIC power key compatible changed by overlay")

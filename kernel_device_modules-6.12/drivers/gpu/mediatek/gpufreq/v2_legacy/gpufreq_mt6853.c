@@ -138,11 +138,12 @@ static int __gpufreq_init_clk(struct platform_device *pdev);
 static int __gpufreq_init_pmic(struct platform_device *pdev);
 static int __gpufreq_init_platform_info(struct platform_device *pdev);
 static int __gpufreq_pdrv_probe(struct platform_device *pdev);
-static int __gpufreq_pdrv_remove(struct platform_device *pdev);
+/* cannon: 6.12 platform_driver .remove returns void (CONFIG_WERROR) */
+static void __gpufreq_pdrv_remove(struct platform_device *pdev);
 static int __gpufreq_mfg2_probe(struct platform_device *pdev);
 static int __gpufreq_mfg3_probe(struct platform_device *pdev);
 static int __gpufreq_mfg5_probe(struct platform_device *pdev);
-static int __gpufreq_mfg_remove(struct platform_device *pdev);
+static void __gpufreq_mfg_remove(struct platform_device *pdev);
 /*low power*/
 static void __gpufreq_kick_pbm(int enable);
 static unsigned int __gpufreq_get_ptpod_opp_idx(unsigned int idx);
@@ -2839,6 +2840,12 @@ static int __gpufreq_pdrv_probe(struct platform_device *pdev)
 	struct device_node *node;
 
 	GPUFREQ_LOGE("start to probe gpufreq platform driver");
+	/* All three shader-domain consumers must have attached before the
+	 * first power-on; missing DT nodes must not become NULL dereferences.
+	 */
+	if (!mfg2Dev || !mfg3Dev || !mfg5Dev)
+		return dev_err_probe(&pdev->dev, -EPROBE_DEFER,
+				     "waiting for MFG2/MFG3/MFG5 power domains\n");
 
 	node = of_find_matching_node(NULL, g_gpufreq_of_match);
 	if (!node)
@@ -2989,21 +2996,19 @@ static int __gpufreq_mfg5_probe(struct platform_device *pdev)
 }
 
 /* API: gpufreq driver remove */
-static int __gpufreq_pdrv_remove(struct platform_device *pdev)
+static void __gpufreq_pdrv_remove(struct platform_device *pdev)
 {
 	kfree(g_gpu.working_table);
 	kfree(g_gpu.sb_table);
 	kfree(g_clk);
 	kfree(g_pmic);
 	kfree(g_power_table);
-
-	return GPUFREQ_SUCCESS;
+	/* cannon: return removed (6.12 .remove is void); GPUFREQ_SUCCESS dropped */
 }
 
-static int __gpufreq_mfg_remove(struct platform_device *pdev)
+static void __gpufreq_mfg_remove(struct platform_device *pdev)
 {
 	pm_runtime_disable(&pdev->dev);
-	return 0;
 }
 /*
  * register the gpufreq driver

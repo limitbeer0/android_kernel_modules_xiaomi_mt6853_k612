@@ -3,6 +3,7 @@
  * Copyright (c) 2021 MediaTek Inc.
  */
 
+#include <linux/device.h>
 #include <linux/err.h>
 #include <linux/module.h>
 
@@ -97,6 +98,17 @@ int mtk_panel_detach(struct mtk_panel_ctx *ctx)
 }
 EXPORT_SYMBOL(mtk_panel_detach);
 
+static void mtk_panel_ext_release(void *data)
+{
+	struct mtk_panel_ctx *ctx = data;
+
+	/* Unlink before devres frees the context and its extension. */
+	mutex_lock(&panel_ext_lock);
+	list_del_init(&ctx->list);
+	ctx->panel = NULL;
+	mutex_unlock(&panel_ext_lock);
+}
+
 int mtk_panel_ext_create(struct device *dev,
 			 struct mtk_panel_params *ext_params,
 			 struct mtk_panel_funcs *ext_funcs,
@@ -119,14 +131,14 @@ int mtk_panel_ext_create(struct device *dev,
 	ext->is_connected = -1;
 	ext_ctx->ext = ext;
 
-	mtk_panel_add(ext_ctx);
 	mtk_panel_attach(ext_ctx, panel);
+	mtk_panel_add(ext_ctx);
 	if (IS_ERR_OR_NULL(ext_funcs->get_lcm_version))
 		g_lcm_version = MTK_LEGACY_LCM_DRV;
 	else
 		g_lcm_version = ext_funcs->get_lcm_version();
 
-	return 0;
+	return devm_add_action_or_reset(dev, mtk_panel_ext_release, ext_ctx);
 }
 EXPORT_SYMBOL(mtk_panel_ext_create);
 

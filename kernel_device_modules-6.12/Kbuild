@@ -22,6 +22,23 @@ obj-$(CONFIG_DEVICE_MODULES_MTK_IOMMU) += drivers/iommu/
 # directory's Makefile gates by config; mirror that here.
 obj-y += drivers/gpu/drm/panel/
 obj-y += drivers/input/touchscreen/
+# cannon: GPU chain (mali-valhall + ged + gpufreq + gpu_bm + hal). The
+# xaga else-branch descends unconditionally; each directory's Makefile
+# gates by CONFIG (MTK_GPU_SUPPORT / MALI_*).
+obj-y += drivers/gpu/mediatek/
+# cannon: system_heap provides mtk_dma_buf_set_name (ged) and
+# dma_buf_get_gid (mediatek-drm); thermal/mediatek's Makefile gates per
+# config, only CONFIG_MTK_THERMAL_INTERFACE builds for now.
+obj-y += drivers/dma-buf/heaps/
+obj-$(CONFIG_MTK_THERMAL_INTERFACE) += drivers/thermal/mediatek/
+# cannon: leds-mtk exports mtk_leds_(un)register_notifier, consumed by
+# thermal_interface (ged pre-throttle chain); the xaga else-branch
+# descends this directory the same way and the Makefile wires obj-m
+# unconditionally per config policy.
+obj-y += drivers/leds/
+# cannon: the LM36273 LCD bias IC sits on i2c7; without the mt65xx adapter
+# driver the i2c_lcd_bias client never appears and the backlight stays off.
+obj-y += drivers/i2c/busses/
 else
 
 ifneq ($(CONFIG_DEVICE_MODULES_ALLOW_BUILTIN),y)

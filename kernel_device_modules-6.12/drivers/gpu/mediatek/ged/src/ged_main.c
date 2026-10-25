@@ -1017,4 +1017,10 @@ module_exit(ged_exit);
 MODULE_DEVICE_TABLE(of, g_ged_of_match);
 MODULE_LICENSE("GPL");
 MODULE_DESCRIPTION("MediaTek GED Driver");
+#if IS_ENABLED(CONFIG_CANNON_BRINGUP)
+/* GED consumes the platform OPP table through wrapper callbacks, which
+ * are not represented by an ELF symbol dependency on the SoC module.
+ */
+MODULE_SOFTDEP("pre: mtk_gpufreq_mt6853");
+#endif
 MODULE_AUTHOR("MediaTek Inc.");

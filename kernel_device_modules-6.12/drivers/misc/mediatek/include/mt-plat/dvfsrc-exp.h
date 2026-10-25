@@ -39,7 +39,9 @@ static inline int mtk_dvfsrc_query_opp_info(u32 id)
 { return 0; }
 static inline int mtk_dvfsrc_vcore_uv_table(u32 opp)
 { return 0; }
-static inline mtk_dvfsrc_thernal_notify(u32 state)
+/* cannon: upstream typo - missing void return type, only compiles when
+ * CONFIG_MTK_DVFSRC_HELPER=y takes the extern-declaration branch. */
+static inline void mtk_dvfsrc_thernal_notify(u32 state)
 {}
 #endif /* CONFIG_MTK_DVFSRC_HELPER */
 

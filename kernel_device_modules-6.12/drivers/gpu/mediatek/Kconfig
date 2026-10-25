@@ -309,3 +309,8 @@ config MTK_GPU_FWLOG_DEBUG
 	  and increase buffer size.
 	  This is a config to enable debug feature.
 
+
+# cannon: mali-valhall (r32p1 DDK) Kconfig wiring, mirrors the reference
+# mt6895 tree so CONFIG_MALI_* symbols reach the kernel Kconfig.
+source "$(KCONFIG_EXT_PREFIX)drivers/gpu/mediatek/mali-valhall/base/arm/Kconfig"
+source "$(KCONFIG_EXT_PREFIX)drivers/gpu/mediatek/mali-valhall/gpu/arm/Kconfig"

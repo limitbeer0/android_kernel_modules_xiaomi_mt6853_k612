@@ -96,14 +96,31 @@ def main():
         depends = [x for x in output("modinfo", "-F", "depends", str(path)).split(",") if x]
         soft = output("modinfo", "-F", "softdep", str(path))
         # Early bring-up must not silently discard an explicit ordering contract.
-        if soft:
-            raise ValueError(f"Add explicit softdep support before staging {path}: {soft}")
+        # cannon (test59): mali_kbase carries "pre: memory_group_manager".
+        # Support the standard modprobe softdep grammar explicitly: pre
+        # entries load before this module, post entries after; anything the
+        # loader cannot express still refuses to stage.
+        pre_deps, post_deps, parsing = [], [], None
+        for token in soft.split():
+            if token in ("pre:", "post:"):
+                parsing = token
+                continue
+            if parsing == "pre:":
+                pre_deps.append(token)
+            elif parsing == "post:":
+                post_deps.append(token)
+            else:
+                raise ValueError(f"Unrecognized softdep form in {path}: {soft}")
+        soft_record = dict(pre=pre_deps, post=post_deps)
+        for dependency in pre_deps:
+            visit(dependency)
         for dependency in depends:
             visit(dependency)
         visiting.remove(name)
         done.add(name)
         ordered.append(path)
-        records[name] = dict(source=str(path.resolve()), depends=depends)
+        records[name] = dict(source=str(path.resolve()), depends=depends,
+                             softdep=soft_record)
 
     for name in roots:
         visit(name)

@@ -208,7 +208,6 @@ static void setupfw_work_handler(struct work_struct *work)
 		pr_info("%s: sspm_ipi fail (%d)\n", __func__, ret);
 #endif /* CONFIG_MTK_TINYSYS_SSPM_SUPPORT */
 #endif /* CONFIG_MTK_TINYSYS_SSPM_V3 */
-	gpu_bm_inited = 1;
 	pr_debug("%s: addr:0x%x, addr_hi:0x%x, ret:%d\n",
 		__func__,
 		qos_d.u.gpu_info.addr,
@@ -216,9 +215,9 @@ static void setupfw_work_handler(struct work_struct *work)
 		ret);
 
 #else
-	if (ret == -1)
-		pr_debug("%s: sspm_ipi is not support!\n", __func__);
+	pr_debug("%s: sspm_ipi is not support!\n", __func__);
 #endif /* CONFIG_MTK_QOS_FRAMEWORK */
+	gpu_bm_inited = 1;
 }
 
 static void _MTKGPUQoS_setupFW(phys_addr_t phyaddr, size_t size)
