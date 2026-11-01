@@ -20,6 +20,17 @@
 	bootargs = "console=tty0 console=ttyS0,921600n1 earlycon=uart8250,mmio32,0x11002000 root=/dev/ram cannon.block_fs_tools=1 cannon.fscrypt_legacy_v1=1 printk.devkmsg=on loglevel=8 ignore_loglevel initcall_debug panic=10 clk_ignore_unused pd_ignore_unused regulator_ignore_unused fw_devlink=permissive firmware_class.path=/vendor/firmware ramoops.mem_address=0x4d010000 ramoops.mem_size=0xe0000 ramoops.record_size=0x1000 ramoops.ftrace_size=0x1000 ramoops.console_size=0x40000 ramoops.pmsg_size=0x10000";
 };
 
+&{/odm} {
+	/* Keep the official HAL/sysfs path; stock DTBO supplies legacy compatible. */
+	vibrator@0 {
+		compatible = "regulator-vibrator";
+		label = "vibrator";
+		vib-supply = <&{/pwrap@10026000/mt6359-pmic/mt6359regulator/ldo_vibr}>;
+		min-volt = <2800000>;
+		max-volt = <2800000>;
+	};
+};
+
 &{/mtu3_0@11200000} {
 	compatible = "xiaomi,cannon-mtu3", "mediatek,mtu3";
 	// Upstream reserves both resources. The legacy 0x3000 MAC window

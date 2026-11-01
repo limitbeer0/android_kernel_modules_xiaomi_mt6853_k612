@@ -307,6 +307,18 @@ static long ged_dispatch(struct file *pFile,
 			ret = ged_bridge_boost_gpu_freq(pvIn, pvOut);
 			break;
 		case GED_BRIDGE_COMMAND_MONITOR_3D_FENCE:
+#if IS_ENABLED(CONFIG_CANNON_BRINGUP)
+			if (psBridgePackageKM->i32InBufferSize == sizeof(int) &&
+			    psBridgePackageKM->i32OutBufferSize ==
+					sizeof(struct GED_BRIDGE_OUT_MONITOR3DFENCE)) {
+				struct GED_BRIDGE_OUT_MONITOR3DFENCE *out = pvOut;
+
+				/* Stock 4.14 ABI: fd only, with real fence monitoring. */
+				out->eError = ged_monitor_3D_fence_add(*(int *)pvIn);
+				ret = 0;
+				break;
+			}
+#endif
 			VALIDATE_ARG(MONITOR_3D_FENCE, MONITOR3DFENCE);
 			ret = ged_bridge_monitor_3D_fence(pvIn, pvOut);
 			break;

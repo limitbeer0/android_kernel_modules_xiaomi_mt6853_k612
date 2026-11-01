@@ -113,6 +113,18 @@ def main():
             raise SystemExit("USB2 PHY bank version changed by overlay")
         if get(merged, "x", usb, "vusb33-supply") != get(merged, "x", "/pwrap@10026000/mt6359-pmic/mt6359regulator/ldo_vusb", "phandle"):
             raise SystemExit("USB VUSB supply mismatch")
+        vibrator = "/odm/vibrator@0"
+        vibr_supply = "/pwrap@10026000/mt6359-pmic/mt6359regulator/ldo_vibr"
+        if not {"mediatek,vibrator", "regulator-vibrator"}.intersection(
+                get(merged, "s", vibrator, "compatible").split()):
+            raise SystemExit("Vibrator compatibility does not match its regulator driver")
+        if get(merged, "s", vibrator, "label") != "vibrator":
+            raise SystemExit("Official vibrator HAL LED name changed")
+        if get(merged, "x", vibrator, "vib-supply") != get(merged, "x", vibr_supply, "phandle"):
+            raise SystemExit("Vibrator does not reference the physical VIBR regulator")
+        if any(int(get(merged, "x", vibrator, prop), 16) != 2800000
+               for prop in ("min-volt", "max-volt")):
+            raise SystemExit("Vibrator voltage differs from the verified 2.8 V setting")
         bootargs = get(merged, "s", "/chosen", "bootargs").split()
         for argument in ("cannon.block_fs_tools=1", "cannon.fscrypt_legacy_v1=1", "ramoops.mem_address=0x4d010000", "ramoops.mem_size=0xe0000",
                          "ramoops.console_size=0x40000", "ramoops.pmsg_size=0x10000",
