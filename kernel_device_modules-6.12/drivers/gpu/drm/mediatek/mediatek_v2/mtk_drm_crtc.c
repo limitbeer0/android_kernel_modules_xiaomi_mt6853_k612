@@ -16696,6 +16696,9 @@ void mtk_drm_crtc_atomic_resume(struct drm_crtc *crtc,
 		mtk_dbgtp_update(priv);
 
 	mtk_drm_crtc_enable(crtc, false);
+	if (priv->data->mmsys_id == MMSYS_MT6853 && output_comp &&
+	    mtk_ddp_comp_get_type(output_comp->id) == MTK_DSI)
+		mtk_dsi_dump_state(output_comp, "cannon atomic resume complete");
 	CRTC_MMP_EVENT_END((int) index, resume,
 			mtk_crtc->enabled, 0);
 }

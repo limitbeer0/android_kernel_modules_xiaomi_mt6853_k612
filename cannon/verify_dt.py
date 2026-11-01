@@ -30,6 +30,19 @@ def main():
         overlay, merged = Path(temp) / "overlay.dtbo", Path(temp) / "merged.dtb"
         overlay.write_bytes(data[start:start+length])
         subprocess.run(["fdtoverlay", "-i", str(args.dtb), "-o", str(merged), str(overlay)], check=True)
+        touch = "/spi4@11018000/touch_spi@0"
+        if get(merged, "s", touch, "compatible") != "xiaomi,spi-for-tp":
+            raise SystemExit("Stock touch transport compatible changed")
+        if get(merged, "u", touch, "novatek,spi-frequency") != "5000000":
+            raise SystemExit("Cannon Novatek chip must use 5 MHz")
+        pio = get(merged, "x", "/pinctrl", "phandle")
+        for prop, pin in (("novatek,reset-gpio", "f"), ("novatek,irq-gpio", "e")):
+            if get(merged, "x", touch, prop) != pio + " " + pin + " 0":
+                raise SystemExit("Cannon touch reset/IRQ GPIO mismatch")
+        if get(merged, "s", touch, "novatek,boot-fw-name") != "novatek_ts_fw.bin":
+            raise SystemExit("Cannon touch firmware selection changed")
+        if get(merged, "u", touch, "super-resolution-factor") != "1":
+            raise SystemExit("Cannon touch requires the normal NT36672A packet protocol")
         banks = [int(x, 16) for x in get(merged, "x", "/pinctrl", "reg").split()]
         addresses = [0x10005000, 0x11c30000, 0x11c20000, 0x11d10000,
                      0x11d30000, 0x11d40000, 0x11e20000, 0x11ea0000, 0x11f30000]

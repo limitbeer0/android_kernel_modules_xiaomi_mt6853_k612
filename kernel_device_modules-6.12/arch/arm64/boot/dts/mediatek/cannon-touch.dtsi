@@ -1,0 +1,56 @@
+// SPDX-License-Identifier: GPL-2.0-only
+// The running Rec2 kernel identifies Novatek on SPI4, not SPI5 (fingerprint).
+// Keep the signed stock DTBO unchanged. Its xiaomi,spi-for-tp child is bound
+// directly by the 6.12 Novatek SPI driver, replacing the old transport glue.
+&{/spi4@11018000} {
+	#address-cells = <1>;
+	#size-cells = <0>;
+	status = "okay";
+	touch_spi@0 {
+		compatible = "xiaomi,spi-for-tp";
+		reg = <0>;
+		status = "okay";
+		spi-max-frequency = <5000000>;
+		// Stock DTBO sets the transport to 6 MHz; the chip node uses 5 MHz.
+		novatek,spi-frequency = <5000000>;
+		novatek,reset-gpio = <&{/pinctrl} 15 0>;
+		novatek,irq-gpio = <&{/pinctrl} 14 0>;
+		novatek,swrst-n8-addr = <0x3f0fe>;
+		novatek,spi-rd-fast-addr = <0x3f310>;
+		super-resolution-factor = <1>;
+		// Verified byte-identical in the working 4.14 boot, firmware v18.
+		novatek,boot-fw-name = "novatek_ts_fw.bin";
+		novatek,boot-mp-name = "novatek_ts_mp.bin";
+		novatek,config-array-size = <1>;
+		pinctrl-names = "pmx_ts_active", "pmx_ts_suspend", "pmx_ts_spimode";
+		pinctrl-0 = <&cannon_ts_int_active &cannon_ts_reset_active>;
+		pinctrl-1 = <&cannon_ts_int_suspend &cannon_ts_reset_suspend>;
+		pinctrl-2 = <&cannon_ts_spi>;
+		config {
+			novatek,tp-vendor = <0x53>;
+			novatek,display-maker = <0x42>;
+			novatek,fw-name = "novatek_ts_fw.bin";
+			novatek,mp-name = "novatek_ts_mp.bin";
+		};
+	};
+};
+
+&{/pinctrl} {
+	cannon_ts_int_active: cannon-ts-int-active {
+		// GPIO14/15 have PU/PD bits, not programmable R1/R0 resistors.
+		// Use the Paris boolean binding; the legacy DT's value 11 is invalid.
+		pins { pinmux = <0x0e00>; bias-pull-down; input-enable; };
+	};
+	cannon_ts_reset_active: cannon-ts-reset-active {
+		pins { pinmux = <0x0f00>; bias-pull-up; output-high; };
+	};
+	cannon_ts_int_suspend: cannon-ts-int-suspend {
+		pins { pinmux = <0x0e00>; bias-disable; };
+	};
+	cannon_ts_reset_suspend: cannon-ts-reset-suspend {
+		pins { pinmux = <0x0f00>; bias-disable; output-low; };
+	};
+	cannon_ts_spi: cannon-ts-spi {
+		pins { pinmux = <0x0c02 0x0d02 0x6102 0x6202>; bias-disable; };
+	};
+};

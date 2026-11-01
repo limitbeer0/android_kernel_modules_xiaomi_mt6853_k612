@@ -70,7 +70,7 @@ extern bool is_tp_doubleclick_enable(void);
 /* ---SPI driver info.--- */
 #define NVT_SPI_NAME			"NVT-ts-spi"
 #define NVT_LOG(fmt, args...)	pr_debug("[%s] %s %d: " fmt, NVT_SPI_NAME, __func__, __LINE__, ##args)
-#define NVT_ERR(fmt, args...)	pr_debug("[%s] %s %d: " fmt, NVT_SPI_NAME, __func__, __LINE__, ##args)
+#define NVT_ERR(fmt, args...)	pr_err("[%s] %s %d: " fmt, NVT_SPI_NAME, __func__, __LINE__, ##args)
 
 /* ---Input device info.--- */
 #define NVT_TS_NAME					"NVTCapacitiveTouchScreen"
@@ -78,13 +78,17 @@ extern bool is_tp_doubleclick_enable(void);
 
 /* ---Touch info.--- */
 #define TOUCH_DEFAULT_MAX_WIDTH		1080
-#define TOUCH_DEFAULT_MAX_HEIGHT	2460
+#if IS_ENABLED(CONFIG_TOUCHSCREEN_CANNON_NT36672A)
+#define TOUCH_DEFAULT_MAX_HEIGHT 2340
+#else
+#define TOUCH_DEFAULT_MAX_HEIGHT 2460
+#endif
 #define TOUCH_MAX_FINGER_NUM		10
 #define TOUCH_KEY_NUM				0
 #define TOUCH_FORCE_NUM				1000
 
 /* Enable only when module have tp reset pin and connected to host */
-#define NVT_TOUCH_SUPPORT_HW_RST 0
+#define NVT_TOUCH_SUPPORT_HW_RST IS_ENABLED(CONFIG_TOUCHSCREEN_CANNON_NT36672A)
 
 /* ---Customerized func.--- */
 #define NVT_TOUCH_PROC							1
@@ -107,7 +111,11 @@ extern bool is_tp_doubleclick_enable(void);
 #define MAX_CMDLINE_PARAM_LEN 512
 #define POINT_DATA_CHECKSUM						1
 
-#define NVT_SUPER_RESOLUTION_10S                                        10
+#if IS_ENABLED(CONFIG_TOUCHSCREEN_CANNON_NT36672A)
+#define NVT_SUPER_RESOLUTION_10S 0
+#else
+#define NVT_SUPER_RESOLUTION_10S 10
+#endif
 #if NVT_SUPER_RESOLUTION_10S
 #define POINT_DATA_LEN							108
 #else
@@ -122,7 +130,9 @@ extern bool is_tp_doubleclick_enable(void);
 #define NVT_TOUCH_ESD_DISP_RECOVERY				1
 
 #define EXPERT_ARRAY_SIZE					3
-#define SUPPORT_GAME_VERSION2					1
+#if !IS_ENABLED(CONFIG_TOUCHSCREEN_CANNON_NT36672A)
+#define SUPPORT_GAME_VERSION2 1
+#endif
 struct nvt_config_info {
 	u8 tp_vendor;
 	u8 tp_color;

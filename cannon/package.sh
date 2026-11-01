@@ -15,7 +15,7 @@ python3 "$ROOT/cannon/verify_dt.py" "$DTB" \
 STAGE=$(mktemp -d "$OUT/modules-stage.XXXXXXXX")
 python3 "$ROOT/cannon/stage_modules.py" "$OUT" \
     "$ROOT/kernel_device_modules-6.12" "$STAGE" --strip "$LLVM_BIN/llvm-strip" \
-    --root phy-mtk-tphy --root mtu3
+    --root phy-mtk-tphy --root mtu3 --root spi-mt65xx
 wdt_args=()
 case "${WATCHDOG_TEST:-0}" in
     0) ;;

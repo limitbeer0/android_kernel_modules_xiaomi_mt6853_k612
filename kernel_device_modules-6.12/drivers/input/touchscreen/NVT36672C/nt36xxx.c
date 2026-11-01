@@ -100,7 +100,7 @@ static int nvt_write_ic_command(int mode, bool enable);
 uint32_t ENG_RST_ADDR  = 0x7FFF80;
 uint32_t SWRST_N8_ADDR = 0; /* read from dtsi */
 uint32_t SPI_RD_FAST_ADDR = 0; /* read from dtsi */
-#if IS_ENABLED(CONFIG_SPI_MT65XX)
+#if IS_ENABLED(CONFIG_SPI_MT65XX) && !IS_ENABLED(CONFIG_TOUCHSCREEN_CANNON_NT36672A)
 const struct mtk_chip_config spi_ctrdata = {
 #ifndef HAVE_PROC_OPS
 	.rx_mlsb = 1,
@@ -1049,9 +1049,13 @@ static int32_t nvt_parse_dt(struct device *dev)
 
 #if NVT_TOUCH_SUPPORT_HW_RST
 	ts->reset_gpio = of_get_named_gpio(np, "novatek,reset-gpio", 0);
+	if (ts->reset_gpio < 0)
+		return ts->reset_gpio;
 	NVT_LOG("novatek,reset-gpio=%d\n", ts->reset_gpio);
 #endif
 	ts->irq_gpio = of_get_named_gpio(np, "novatek,irq-gpio", 0);
+	if (ts->irq_gpio < 0)
+		return ts->irq_gpio;
 	NVT_LOG("novatek,irq-gpio=%d\n", ts->irq_gpio);
 
 	ret = of_property_read_u32(np, "novatek,swrst-n8-addr", &SWRST_N8_ADDR);
@@ -1086,6 +1090,8 @@ static int32_t nvt_parse_dt(struct device *dev)
 	} else {
 		NVT_LOG("spi-max-frequency: %u\n", ts->spi_max_freq);
 	}
+	if (IS_ENABLED(CONFIG_TOUCHSCREEN_CANNON_NT36672A))
+		of_property_read_u32(np, "novatek,spi-frequency", &ts->spi_max_freq);
 	ret = of_property_read_u32(np, "super-resolution-factor", &ts->super_resolution_factor);
 	if (ret) {
 		NVT_ERR("no support, use default factors 1.0  for super resolution\n");
@@ -1260,6 +1266,24 @@ bool is_lockdown_empty(u8 *lockdown)
 
 void nvt_match_fw(void)
 {
+	const char *boot_fw, *boot_mp;
+
+	/* Cannon's known-working 4.14 image embeds these exact board firmwares.
+	 * The modern mi_disp lockdown provider is absent on this board. Use an
+	 * explicit DT selection, without pretending to have read a lockdown ID.
+	 */
+	if (IS_ENABLED(CONFIG_TOUCHSCREEN_CANNON_NT36672A) &&
+	    of_machine_is_compatible("xiaomi,cannon") &&
+	    !of_property_read_string(ts->client->dev.of_node,
+			"novatek,boot-fw-name", &boot_fw) &&
+	    !of_property_read_string(ts->client->dev.of_node,
+			"novatek,boot-mp-name", &boot_mp)) {
+		ts->fw_name = boot_fw;
+		ts->mp_name = boot_mp;
+		dev_info(&ts->client->dev, "Cannon NT36672A firmware: %s\n",
+			 ts->fw_name);
+		return;
+	}
 	NVT_LOG("start match fw name");
 	if (is_lockdown_empty(ts->lockdown_info))
 		flush_delayed_work(&ts->nvt_lockdown_work);
@@ -1739,6 +1763,9 @@ static int8_t nvt_ts_check_chip_ver_trim(uint32_t chip_ver_trim_addr)
 		buf[5] = 0x00;
 		buf[6] = 0x00;
 		ret = CTP_SPI_READ(ts->client, buf, 7);
+		if (IS_ENABLED(CONFIG_TOUCHSCREEN_CANNON_NT36672A))
+			dev_info(&ts->client->dev, "trim@%06x ret=%d id=%*ph\n",
+				 chip_ver_trim_addr, ret, 6, buf + 1);
 		NVT_LOG("ret = 0x%02x, buf[0] = 0x%02x,buf[1]=0x%02X, buf[2]=0x%02X, buf[3]=0x%02X, buf[4]=0x%02X, buf[5]=0x%02X, buf[6]=0x%02X\n",
 			ret,buf[0],buf[1], buf[2], buf[3], buf[4], buf[5], buf[6]);
 
@@ -2611,6 +2638,10 @@ static int32_t nvt_ts_probe(struct spi_device *client)
 	int32_t ret = 0;
 	struct attribute_group *attrs_p = NULL;
 
+	if (of_device_is_compatible(client->dev.of_node, "xiaomi,spi-for-tp") &&
+	    !of_machine_is_compatible("xiaomi,cannon"))
+		return -ENODEV;
+
 	NVT_LOG("start\n");
 
 	ts = kzalloc(sizeof(struct nvt_ts_data), GFP_KERNEL);
@@ -2629,6 +2660,7 @@ static int32_t nvt_ts_probe(struct spi_device *client)
 	}
 
 	/* ---parse dts--- */
+	ts->client = client;
 	ret = nvt_parse_dt(&client->dev);
 	if (ret) {
 		NVT_ERR("parse dt error\n");
@@ -2636,18 +2668,53 @@ static int32_t nvt_ts_probe(struct spi_device *client)
 	}
 	ts->client = client;
 	spi_set_drvdata(ts->client, ts);
+	if (IS_ENABLED(CONFIG_TOUCHSCREEN_CANNON_NT36672A)) {
+		const char *boot_fw, *boot_mp;
+
+		/* Display callbacks can request resume during probe. Set names
+		 * before registering input/notifiers, not only in delayed FW work.
+		 */
+		ret = of_property_read_string(client->dev.of_node,
+				"novatek,boot-fw-name", &boot_fw);
+		if (ret)
+			goto err_spi_setup;
+		ret = of_property_read_string(client->dev.of_node,
+				"novatek,boot-mp-name", &boot_mp);
+		if (ret)
+			goto err_spi_setup;
+		ts->fw_name = boot_fw;
+		ts->mp_name = boot_mp;
+	}
 
 	/* ---prepare for spi parameter--- */
 	ts->client->bits_per_word = 8;
 	ts->client->mode = SPI_MODE_0;
 	ts->client->max_speed_hz = ts->spi_max_freq;
 	ts->debug_flag = 2;
+	if (IS_ENABLED(CONFIG_TOUCHSCREEN_CANNON_NT36672A)) {
+		/* 4.14 spi-mt65xx used cs_time = 2 * sck_time for setup,
+		 * hold and idle when the NT36672A config left them at zero.
+		 * Common 6.12 requires explicit SPI delays instead. One clock
+		 * period reproduces that policy without a vendor struct ABI.
+		 */
+		struct spi_delay cs = {
+			.value = DIV_ROUND_UP(NSEC_PER_SEC, ts->spi_max_freq),
+			.unit = SPI_DELAY_UNIT_NSECS,
+		};
 
-#if IS_ENABLED(CONFIG_SPI_MT65XX)
+		client->cs_setup = cs;
+		client->cs_hold = cs;
+		client->cs_inactive = cs;
+	}
+
+#if IS_ENABLED(CONFIG_SPI_MT65XX) && !IS_ENABLED(CONFIG_TOUCHSCREEN_CANNON_NT36672A)
 	/* new usage of MTK spi API */
 	memcpy(&ts->spi_ctrl, &spi_ctrdata, sizeof(struct mtk_chip_config));
 	ts->client->controller_data = (void *)&ts->spi_ctrl;
 #endif
+	/* Cannon uses the common spi-mt65xx default (sample_sel/tick_delay=0).
+	 * Its controller_data layout differs from the vendor extension above.
+	 */
 	ts->ts_workqueue = create_singlethread_workqueue("nvt_wq");
 	if (!ts->ts_workqueue) {
 		NVT_ERR("create nvt workqueue fail");
@@ -2667,16 +2734,24 @@ static int32_t nvt_ts_probe(struct spi_device *client)
 	NVT_LOG("mode=%d, max_speed_hz=%d\n", ts->client->mode, ts->client->max_speed_hz);
 
 	ret = nvt_pinctrl_init(ts);
+	if (ret && IS_ENABLED(CONFIG_TOUCHSCREEN_CANNON_NT36672A)) {
+		dev_err_probe(&client->dev, ret, "Touch pinctrl unavailable\n");
+		goto err_spi_setup;
+	}
 	if (!ret && ts->ts_pinctrl) {
 		ret = pinctrl_select_state(ts->ts_pinctrl, ts->pinctrl_state_active);
 		if (ret < 0) {
 			NVT_ERR("Failed to select %s pinstate %d\n",
 				PINCTRL_STATE_ACTIVE, ret);
+			if (IS_ENABLED(CONFIG_TOUCHSCREEN_CANNON_NT36672A))
+				goto err_spi_setup;
 		}
 		ret = pinctrl_select_state(ts->ts_pinctrl,ts->pinctrl_state_spimode);
 		if (ret < 0) {
 			NVT_ERR("Failed to select %s pinstate %d\n",
 				"pmx_ts_spimode", ret);
+			if (IS_ENABLED(CONFIG_TOUCHSCREEN_CANNON_NT36672A))
+				goto err_spi_setup;
 		} else {
 			NVT_ERR("success to select spimode");
 		}
@@ -2775,6 +2850,12 @@ static int32_t nvt_ts_probe(struct spi_device *client)
 	}
 
 	ts->client->irq = gpio_to_irq(ts->irq_gpio);
+	if (ts->client->irq <= 0) {
+		ret = ts->client->irq ?: -EINVAL;
+		dev_err(&client->dev, "No touch IRQ for GPIO %d: %d\n",
+			ts->irq_gpio, ret);
+		goto err_int_request_failed;
+	}
 	if (ts->client->irq > 0) {
 		NVT_LOG("int_trigger_type=%d\n", ts->int_trigger_type);
 		ts->irq_enabled = true;
@@ -3507,6 +3588,10 @@ static const struct spi_device_id nvt_ts_id[] = {
 
 static struct of_device_id nvt_match_table[] = {
 	{ .compatible = "novatek,NVT-ts-spi",},
+#if IS_ENABLED(CONFIG_TOUCHSCREEN_CANNON_NT36672A)
+	/* Signed stock DTBO keeps the legacy SPI transport compatible. */
+	{ .compatible = "xiaomi,spi-for-tp", },
+#endif
 	{ },
 };
 

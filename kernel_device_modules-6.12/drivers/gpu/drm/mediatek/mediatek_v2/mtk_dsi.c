@@ -6419,6 +6419,8 @@ static void mtk_output_dsi_enable(struct mtk_dsi *dsi,
 
 	dsi->pending_switch = false;
 	dsi->output_en = true;
+	if (of_machine_is_compatible("xiaomi,cannon"))
+		mtk_dsi_dump_state(&dsi->ddp_comp, "cannon DSI output enable complete");
 	dsi->doze_enabled = new_doze_state;
 
 out:

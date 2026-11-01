@@ -65,6 +65,13 @@ config TOUCHSCREEN_NVT36672C_DOUBLE_CLICK
 	tristate "double click for nvt36672c"
 	default n
 
+config TOUCHSCREEN_CANNON_NT36672A
+	bool "Cannon NT36672A board protocol"
+	depends on TOUCHSCREEN_NVT36672C_HOSTDL_SPI
+	help
+	  Use Cannon's 65-byte NT36672A packet format and hardware reset.
+	  Firmware names and the board wiring are provided by the device tree.
+
 config MI_DISP_ESD_CHECK
 	bool "Enable display ESD check recovery"
 	default n

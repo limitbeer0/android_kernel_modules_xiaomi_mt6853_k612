@@ -10,9 +10,11 @@ required = {
     "SECURITY_SELINUX": "y",
     "PSTORE": "y", "PSTORE_CONSOLE": "y", "PSTORE_PMSG": "y", "PSTORE_RAM": "y",
     "BLK_DEV_INITRD": "y", "RD_GZIP": "y", "LTO_NONE": "y",
-    "EXTRA_FIRMWARE": '"valhall-1691526.wa"',
+    "EXTRA_FIRMWARE": '"valhall-1691526.wa novatek_ts_fw.bin novatek_ts_mp.bin"',
     "EXTRA_FIRMWARE_DIR": '"firmware"',
     "COMMON_CLK_MT6853": "m", "PINCTRL_MT6853": "m",
+    "SPI_MT65XX": "m", "TOUCHSCREEN_NVT36672C_HOSTDL_SPI": "m",
+    "TOUCHSCREEN_CANNON_NT36672A": "y",
     "DEVICE_MODULES_MTK_PMIC_WRAP": "m",
     "DEVICE_MODULES_MFD_MT6397": "m", "REGULATOR_MT6359P": "m",
     "CANNON_UFS_MT6853": "m", "DEVICE_MODULES_KEYBOARD_MTK_PMIC": "m",
@@ -31,7 +33,7 @@ for name in ("CFI_CLANG", "SHADOW_CALL_STACK", "XAGA_MARKER_WRITER", "XAGA_KMSG2
              "SCSI_UFS_MEDIATEK", "DEVICE_MODULES_SCSI_UFS_MEDIATEK", "KEYBOARD_MTK_PMIC",
              "CMDLINE_EXTEND", "CMDLINE_FORCE", "KVM", "CPU_IDLE", "CPU_FREQ",
              "USB_MTU3_DUAL_ROLE", "USB_MTU3_HOST", "DEVICE_MODULES_USB_MTU3",
-             "DEVICE_MODULES_PHY_MTK_TPHY"):
+             "DEVICE_MODULES_PHY_MTK_TPHY", "DEVICE_MODULES_SPI_MT65XX"):
     if config.get("CONFIG_"+name) in ("y", "m"):
         errors.append(f"CONFIG_{name} must be disabled")
 if config.get("CONFIG_CMDLINE") != '""':
