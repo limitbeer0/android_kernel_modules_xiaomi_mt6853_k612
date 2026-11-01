@@ -11,7 +11,6 @@
 #include <linux/kernel.h>
 #include <linux/leds.h>
 #include <linux/module.h>
-#include <linux/mutex.h>
 #include <linux/of.h>
 #include <linux/of_platform.h>
 #include <linux/platform_device.h>
@@ -40,11 +39,6 @@ struct reg_vibr {
 	struct led_classdev vibr_cdev;
 	struct reg_vibr_config vibr_conf;
 	struct notifier_block oc_handle;
-#if IS_ENABLED(CONFIG_CANNON_BRINGUP)
-	struct hrtimer stop_timer;
-	struct mutex control_lock;
-	unsigned int duration_ms;
-#endif
 };
 
 static int mt_vibra_init_config(struct device *dev,
@@ -140,88 +134,10 @@ static void update_vibrator(struct work_struct *work)
 		vibr_enable(vibr);
 }
 
-#if IS_ENABLED(CONFIG_CANNON_BRINGUP)
-static enum hrtimer_restart cannon_vibr_timeout(struct hrtimer *timer)
-{
-	struct reg_vibr *vibr = container_of(timer, struct reg_vibr, stop_timer);
 
-	atomic_set(&vibr->vibr_state, 0);
-	queue_work(vibr->vibr_queue, &vibr->vibr_work);
-	return HRTIMER_NORESTART;
-}
-
-static struct reg_vibr *cannon_vibr_from_dev(struct device *dev)
-{
-	struct led_classdev *cdev = dev_get_drvdata(dev);
-
-	return container_of(cdev, struct reg_vibr, vibr_cdev);
-}
-
-static ssize_t cannon_duration_store(struct device *dev,
-		struct device_attribute *attr, const char *buf, size_t count)
-{
-	struct reg_vibr *vibr = cannon_vibr_from_dev(dev);
-	unsigned int duration;
-	int ret = kstrtouint(buf, 10, &duration);
-
-	if (ret)
-		return ret;
-	mutex_lock(&vibr->control_lock);
-	vibr->duration_ms = duration;
-	mutex_unlock(&vibr->control_lock);
-	return count;
-}
-
-static ssize_t cannon_activate_show(struct device *dev,
-		struct device_attribute *attr, char *buf)
-{
-	return sysfs_emit(buf, "%d\n",
-		atomic_read(&cannon_vibr_from_dev(dev)->vibr_state));
-}
-
-static ssize_t cannon_activate_store(struct device *dev,
-		struct device_attribute *attr, const char *buf, size_t count)
-{
-	struct reg_vibr *vibr = cannon_vibr_from_dev(dev);
-	unsigned int activate, duration;
-	int ret = kstrtouint(buf, 10, &activate);
-
-	if (ret)
-		return ret;
-	if (activate > 1)
-		return -EINVAL;
-	mutex_lock(&vibr->control_lock);
-	hrtimer_cancel(&vibr->stop_timer);
-	duration = min(vibr->duration_ms, 15000U);
-	/* The working driver stretches 10..24 ms requests to 25 ms. */
-	if (duration >= 10 && duration < 25)
-		duration = 25;
-	if (atomic_read(&vibr->vibr_shutdown) || !duration)
-		activate = 0;
-	atomic_set(&vibr->vibr_state, activate);
-	queue_work(vibr->vibr_queue, &vibr->vibr_work);
-	if (activate)
-		hrtimer_start(&vibr->stop_timer, ms_to_ktime(duration), HRTIMER_MODE_REL);
-	mutex_unlock(&vibr->control_lock);
-	return count;
-}
-
-static DEVICE_ATTR(duration, 0644, NULL, cannon_duration_store);
-static DEVICE_ATTR(activate, 0644, cannon_activate_show, cannon_activate_store);
-
-static struct attribute *cannon_vibr_attrs[] = {
-	&dev_attr_duration.attr,
-	&dev_attr_activate.attr,
-	NULL,
-};
-ATTRIBUTE_GROUPS(cannon_vibr);
-#endif
 
 static void vibr_stop_sync(struct reg_vibr *vibr)
 {
-#if IS_ENABLED(CONFIG_CANNON_BRINGUP)
-	hrtimer_cancel(&vibr->stop_timer);
-#endif
 	atomic_set(&vibr->vibr_state, 0);
 	cancel_work_sync(&vibr->vibr_work);
 	vibr_disable(vibr);
@@ -295,13 +211,10 @@ static int vib_probe(struct platform_device *pdev)
 
 	INIT_WORK(&m_vibr->vibr_work, update_vibrator);
 	atomic_set(&m_vibr->vibr_shutdown, 0);
-#if IS_ENABLED(CONFIG_CANNON_BRINGUP)
-	mutex_init(&m_vibr->control_lock);
-	m_vibr->duration_ms = 25;
-	hrtimer_init(&m_vibr->stop_timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
-	m_vibr->stop_timer.function = cannon_vibr_timeout;
-	m_vibr->vibr_cdev.groups = cannon_vibr_groups;
-#endif
+	/* Android init selects the transient trigger, which owns
+	 * activate/duration/state. Registering those names here makes
+	 * led_trigger_set() fail with EEXIST and removes the HAL interface.
+	 */
 
 	ret = regulator_is_enabled(m_vibr->vibr_conf.reg);
 	if (ret < 0)

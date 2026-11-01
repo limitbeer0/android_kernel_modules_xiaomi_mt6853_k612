@@ -1,8 +1,8 @@
 # Pending HAL compatibility checkpoint
 
-These changes are **built but not yet tested on the phone**. test68 remains
-the user-confirmed display milestone. Do not attribute its visible output to
-this subsequent patch.
+test69 isolated the vibrator startup blocker on the phone. The GED request-size
+error stopped recurring. test70 then cold booted successfully using the trigger
+fix below, without manual trigger or ownership repair.
 
 Clang/LLD 13 and strict modpost passed. The test69 package passed all 15 boot
 tests, the 72-module dependency check and the original DTBO merge checks,
@@ -32,16 +32,35 @@ range. The running 6.12 regulator class already reported VIBR at 2800000 uV
 and disabled. verify_dt.py merges the original DTBO and checks the actual
 regulator phandle, label, compatible and voltage constraints.
 
-The baseline regulator-vibrator module gains Cannon's legacy compatible and
-duration/activate attributes. Activating schedules real regulator work and a
-monotonic hrtimer to stop it, preserving the working driver's 25 ms short
-pulse rule and 15000 ms maximum. Suspend/shutdown cancel the timer and work
-before disabling the regulator. Devres teardown unregisters notifier and LED
-before draining/destroying the workqueue, while the regulator reference is
-still valid. Voltage is configured before exposing the LED device.
+The baseline regulator-vibrator module gains Cannon's legacy compatible.
+Its LED brightness callback schedules real regulator work. Devres teardown
+unregisters notifier and LED before draining/destroying the workqueue, while
+the regulator reference is still valid. Voltage is configured before
+exposing the LED device.
 
-Validation remaining: probe the merged node, confirm permissions and the
-official HAL registration, verify the real timed motor on/off behavior and
-suspend/shutdown cleanup, then check whether system_server passes this wait.
-There may be further missing HALs after it. This is not proof of a completed
-Android boot or a working haptic actuator.
+The initial test69 patch incorrectly supplied its own duration/activate
+attributes. Official /system/etc/init/hw/init.rc line 423 selects the kernel's
+transient LED trigger, which already owns activate/duration/state. That
+selection failed with EEXIST at 9.482376 seconds and removed the overlapping
+attributes. The LED core and module field offsets were checked and agreed;
+this was not a structure layout mismatch.
+
+Re-selecting transient after the collision and applying the same system:system
+ownership as stock init let the original HAL register. test69 then reached
+sys.boot_completed=1, sys.user.0.ce_available=true, global Enforcing, and stopped
+bootanim. No system or vendor binaries/policy were replaced for this repair.
+test70 removes the duplicate attributes and custom timer; stock init and the
+existing kernel transient trigger now provide the timed HAL interface.
+
+test70 reached sys.boot_completed=1, CE=true and stopped bootanim by the
+96-second snapshot. The vibrator HAL stayed running and init automatically
+selected transient and applied the expected ownership. A 500 ms pulse was
+tested through its sysfs interface: activate=1, brightness=255, VIBR enabled;
+after the timer: activate=0, brightness=0, VIBR disabled. The sampled regulator
+was identified by name as vibr and reported 2800000 uV. Physical vibration
+and suspend/shutdown behavior still require confirmation.
+
+The stock 600-second diagnostic recovery budget remains in these images.
+The test70 short-power-key panic parameter was disabled at runtime for normal
+UI testing; automatic panic-to-Recovery handling remains enabled. Only the
+PMIC keys were enumerated as input devices, so touch is the next porting step.
