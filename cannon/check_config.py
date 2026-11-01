@@ -16,13 +16,15 @@ required = {
     "DEVICE_MODULES_MTK_PMIC_WRAP": "m",
     "DEVICE_MODULES_MFD_MT6397": "m", "REGULATOR_MT6359P": "m",
     "CANNON_UFS_MT6853": "m", "DEVICE_MODULES_KEYBOARD_MTK_PMIC": "m",
-    "CANNON_POWERKEY_PANIC": "y", "SCSI_UFSHCD": "y", "SCSI_UFSHCD_PLATFORM": "y",
+    # power key must do its real job (sleep/wake); recovery routes are the
+    # 600s watchdog auto-Fox and LK long-press reset (user, 2026-11-01)
+    "CANNON_POWERKEY_PANIC": "n", "SCSI_UFSHCD": "y", "SCSI_UFSHCD_PLATFORM": "y",
     "MICROTRUST_TEE_SUPPORT": "m", "MICROTRUST_TEE_VERSION": '"400"',
     "MTK_RPMB": "m", "RPMB_INTF_DEV": "y",
     "USB_MTU3": "m", "USB_MTU3_GADGET": "y", "PHY_MTK_TPHY": "m",
 }
 errors = [f"CONFIG_{name}={config.get('CONFIG_'+name, 'n')} (need {value})"
-          for name, value in required.items() if config.get("CONFIG_"+name) != value]
+          for name, value in required.items() if config.get("CONFIG_"+name, "n") != value]
 for name in ("CFI_CLANG", "SHADOW_CALL_STACK", "XAGA_MARKER_WRITER", "XAGA_KMSG2USB",
              "COMMON_CLK_MEDIATEK", "PINCTRL_MTK_PARIS", "PINCTRL_MTK_V2", "EINT_MTK",
              "MTK_PMIC_WRAP", "MFD_MT6397", "REGULATOR_MT6359",
