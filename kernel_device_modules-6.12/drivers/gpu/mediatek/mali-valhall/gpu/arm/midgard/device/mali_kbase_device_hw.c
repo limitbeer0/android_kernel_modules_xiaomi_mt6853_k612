@@ -89,7 +89,8 @@ bool kbase_is_gpu_removed(struct kbase_device *kbdev)
 		dev_err(kbdev->dev, "kbase_is_gpu_removed: GPU_ID=0! DIAG: SPM MFG0=0x%08x MFG1=0x%08x XPU=0x%08x, MFGCFG sta=0x%08x (bit0 %s), nr_clocks=%d\n",
 			mfg0, mfg1, xpu, sta, (sta & 1) ? "GATED" : "UNGATED", kbdev->nr_clocks);
 	} else {
-		dev_info(kbdev->dev, "kbase_is_gpu_removed: GPU_ID register read = 0x%08x (valid)\n", val);
+		dev_dbg_ratelimited(kbdev->dev,
+			"kbase_is_gpu_removed: GPU_ID register read = 0x%08x (valid)\n", val);
 	}
 
 	return val == 0;

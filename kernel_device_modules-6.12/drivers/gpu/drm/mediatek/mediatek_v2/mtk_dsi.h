@@ -346,5 +346,6 @@ extern int mtk_dsi_fifo_mon_trigger_start_set(bool is_trig_start);
  * (LK did not init the DSI engine; force a full preconfig + panel init). */
 int mtk_preconfig_dsi_enable(struct mtk_dsi *dsi);
 void mtk_dsi_start_engine(struct mtk_dsi *dsi);
+void mtk_dsi_dump_state(struct mtk_ddp_comp *comp, const char *stage);
 
 #endif

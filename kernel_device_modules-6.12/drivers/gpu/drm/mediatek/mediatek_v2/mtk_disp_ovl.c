@@ -2803,6 +2803,23 @@ static void mtk_ovl_layer_config(struct mtk_ddp_comp *comp, unsigned int idx,
 			state->base.fb->format->has_alpha, state->base.pixel_blend_mode);
 	}
 
+#ifdef CONFIG_CANNON_BRINGUP
+	if (state->cannon_legacy_blend) {
+		/* Restore the actual 4.14 OVL inputs, not just property names. */
+		alpha_con = pending->prop_val[PLANE_PROP_CANNON_ALPHA_CON];
+		if (alpha == 0xff &&
+		    (fmt == DRM_FORMAT_RGBX8888 || fmt == DRM_FORMAT_BGRX8888 ||
+		     fmt == DRM_FORMAT_XRGB8888 || fmt == DRM_FORMAT_XBGR8888))
+			alpha_con = 0;
+		modifier = pending->modifier & MTK_FMT_PREMULTIPLIED;
+		/* Legacy OVL leaves CONST_BLD clear and selects premultiplication
+		 * using the framebuffer's MTK modifier, independently of bit 8.
+		 */
+		pixel_blend_mode = modifier ? DRM_MODE_BLEND_PREMULTI :
+					     DRM_MODE_BLEND_COVERAGE;
+	}
+#endif
+
 	if (pixel_blend_mode == DRM_MODE_BLEND_PREMULTI)
 		modifier |= MTK_FMT_PREMULTIPLIED;
 

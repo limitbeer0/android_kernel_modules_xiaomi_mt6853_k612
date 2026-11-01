@@ -11,6 +11,7 @@
 size_t mtk_fb_get_size(struct drm_framebuffer *fb);
 struct drm_gem_object *mtk_fb_get_gem_obj(struct drm_framebuffer *fb);
 dma_addr_t mtk_fb_get_dma(struct drm_framebuffer *fb);
+u64 mtk_fb_get_modifier(struct drm_framebuffer *fb);
 int mtk_fb_wait(struct drm_framebuffer *fb);
 struct drm_framebuffer *
 mtk_drm_mode_fb_create(struct drm_device *dev, struct drm_file *file,

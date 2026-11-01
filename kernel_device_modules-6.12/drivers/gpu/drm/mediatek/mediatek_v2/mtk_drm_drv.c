@@ -70,6 +70,9 @@
 #include "mtk_vdisp_common.h"
 #include "mtk_disp_dbi_count.h"
 #include "mtk_disp_dbgtp.h"
+#if IS_ENABLED(CONFIG_CANNON_BRINGUP)
+#include "cannon_hwc_abi.h"
+#endif
 
 #ifdef CONFIG_MTK_FB_MMDVFS_SUPPORT
 #include <linux/interconnect.h>
@@ -10206,6 +10209,113 @@ static void mtk_drm_kms_lateinit(struct drm_device *drm)
 		bdg_first_init();
 }
 
+#if IS_ENABLED(CONFIG_CANNON_BRINGUP)
+/*
+ * MIUI's HWC initially sets ACTIVE/DOZE_ACTIVE without supplying MODE_ID.
+ * The old fbdev startup had already installed a mode at that point.  The
+ * LK handoff above only initializes the vendor/hardware state, so publish
+ * the panel mode through a real atomic transaction before exposing DRM.
+ */
+static int cannon_drm_publish_boot_mode(struct drm_device *drm)
+{
+	struct mtk_drm_private *priv = drm->dev_private;
+	struct drm_crtc *crtc = priv->crtc[0];
+	struct drm_connector *connector, *panel = NULL;
+	struct drm_connector_list_iter iter;
+	struct drm_encoder *encoder;
+	struct drm_display_mode *mode, *selected;
+	struct drm_display_mode boot_mode;
+	struct drm_modeset_acquire_ctx ctx;
+	struct drm_atomic_state *state;
+	struct drm_crtc_state *crtc_state;
+	struct drm_connector_state *conn_state;
+	int ret;
+
+	if (!crtc || !to_mtk_crtc(crtc)->enabled)
+		return 0;
+
+	drm_connector_list_iter_begin(drm, &iter);
+	drm_for_each_connector_iter(connector, &iter) {
+		if (connector->connector_type != DRM_MODE_CONNECTOR_DSI)
+			continue;
+		drm_connector_for_each_possible_encoder(connector, encoder) {
+			if (encoder->possible_crtcs & drm_crtc_mask(crtc)) {
+				panel = connector;
+				drm_connector_get(panel);
+				break;
+			}
+		}
+		if (panel)
+			break;
+	}
+	drm_connector_list_iter_end(&iter);
+	if (!panel)
+		return -ENODEV;
+
+	mutex_lock(&drm->mode_config.mutex);
+	ret = panel->funcs->fill_modes(panel, drm->mode_config.max_width,
+				     drm->mode_config.max_height);
+	if (ret <= 0 || list_empty(&panel->modes)) {
+		ret = ret < 0 ? ret : -ENODEV;
+		mutex_unlock(&drm->mode_config.mutex);
+		goto put_connector;
+	}
+	selected = list_first_entry(&panel->modes, struct drm_display_mode, head);
+	list_for_each_entry(mode, &panel->modes, head) {
+		if (mode->type & DRM_MODE_TYPE_PREFERRED)
+			selected = mode;
+		if (drm_mode_equal(mode, &crtc->state->adjusted_mode)) {
+			selected = mode;
+			break;
+		}
+	}
+	drm_mode_copy(&boot_mode, selected);
+	mutex_unlock(&drm->mode_config.mutex);
+
+	state = drm_atomic_state_alloc(drm);
+	if (!state) {
+		ret = -ENOMEM;
+		goto put_connector;
+	}
+	drm_modeset_acquire_init(&ctx, 0);
+	state->acquire_ctx = &ctx;
+retry:
+	crtc_state = drm_atomic_get_crtc_state(state, crtc);
+	if (IS_ERR(crtc_state)) {
+		ret = PTR_ERR(crtc_state);
+		goto out;
+	}
+	conn_state = drm_atomic_get_connector_state(state, panel);
+	if (IS_ERR(conn_state)) {
+		ret = PTR_ERR(conn_state);
+		goto out;
+	}
+	ret = drm_atomic_set_crtc_for_connector(conn_state, crtc);
+	if (ret)
+		goto out;
+	ret = drm_atomic_set_mode_for_crtc(crtc_state, &boot_mode);
+	if (ret)
+		goto out;
+	crtc_state->active = true;
+	ret = drm_atomic_commit(state);
+out:
+	if (ret == -EDEADLK) {
+		drm_atomic_state_clear(state);
+		ret = drm_modeset_backoff(&ctx);
+		if (!ret)
+			goto retry;
+	}
+	drm_atomic_state_put(state);
+	drm_modeset_drop_locks(&ctx);
+	drm_modeset_acquire_fini(&ctx);
+	dev_info(drm->dev, "cannon: publish boot mode %s ret=%d\n",
+		 boot_mode.name, ret);
+put_connector:
+	drm_connector_put(panel);
+	return ret;
+}
+#endif
+
 static int mtk_drm_kms_init(struct drm_device *drm)
 {
 	struct mtk_drm_private *private = drm->dev_private;
@@ -11567,11 +11677,40 @@ EXPORT_SYMBOL(mtk_drm_compat_ioctl);
 #define mtk_drm_compat_ioctl NULL
 #endif
 
+#if IS_ENABLED(CONFIG_CANNON_BRINGUP)
+static long cannon_drm_ioctl(struct file *file, unsigned int cmd,
+			     unsigned long arg)
+{
+	struct cannon_hwc_layering data;
+	void __user *argp = (void __user *)arg;
+	long ret;
+
+	if (cmd != DRM_IOWR(DRM_COMMAND_BASE + DRM_MTK_LAYERING_RULE,
+			    struct cannon_hwc_layering))
+		return drm_ioctl(file, cmd, arg);
+
+	if (copy_from_user(&data, argp, sizeof(data)))
+		return -EFAULT;
+	/* Preserve the normal DRM unplug/authentication checks. */
+	ret = drm_ioctl_kernel(file, cannon_layering_rule_ioctl, &data,
+			       DRM_AUTH | DRM_RENDER_ALLOW);
+	if (ret)
+		return ret;
+	if (copy_to_user(argp, &data, sizeof(data)))
+		return -EFAULT;
+	return 0;
+}
+#endif
+
 static const struct file_operations mtk_drm_fops = {
 	.owner = THIS_MODULE,
 	.open = drm_open,
 	.release = drm_release,
+#if IS_ENABLED(CONFIG_CANNON_BRINGUP)
+	.unlocked_ioctl = cannon_drm_ioctl,
+#else
 	.unlocked_ioctl = drm_ioctl,
+#endif
 	.mmap = mtk_drm_gem_mmap,
 	.poll = drm_poll,
 	.read = drm_read,
@@ -11624,6 +11763,14 @@ static int mtk_drm_bind(struct device *dev)
 	ret = mtk_drm_kms_init(drm);
 	if (ret < 0)
 		goto err_free;
+
+#if IS_ENABLED(CONFIG_CANNON_BRINGUP)
+	ret = cannon_drm_publish_boot_mode(drm);
+	if (ret < 0) {
+		dev_err(dev, "cannon: boot mode publication failed: %d\n", ret);
+		goto err_deinit;
+	}
+#endif
 
 	ret = drm_dev_register(drm, 0);
 	if (ret < 0)

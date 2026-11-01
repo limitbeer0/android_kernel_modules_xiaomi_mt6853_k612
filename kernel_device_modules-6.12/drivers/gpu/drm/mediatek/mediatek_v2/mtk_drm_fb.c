@@ -25,9 +25,43 @@ struct mtk_drm_fb {
 	struct drm_framebuffer base;
 	/* For now we only support a single plane */
 	struct drm_gem_object *gem_obj;
+	u64 legacy_blend_modifier;
 };
 
 #define to_mtk_fb(x) container_of(x, struct mtk_drm_fb, base)
+
+u64 mtk_fb_get_modifier(struct drm_framebuffer *fb)
+{
+	struct mtk_drm_fb *mtk_fb = to_mtk_fb(fb);
+
+	return mtk_fb->legacy_blend_modifier ?: fb->modifier;
+}
+
+#if IS_ENABLED(CONFIG_CANNON_BRINGUP)
+static bool cannon_fb_has_legacy_blend_hint(const struct drm_mode_fb_cmd2 *mode)
+{
+	/* MIUI14 tags blend semantics, not a tiled/compressed memory layout.
+	 * This old private tag collides with a modern DRM vendor namespace;
+	 * keep it private to OVL instead of advertising that layout in KMS.
+	 */
+	if ((mode->modifier[0] & ~1ULL) != 0x0a00000000000000ULL)
+		return false;
+	switch (mode->pixel_format) {
+	case DRM_FORMAT_XRGB8888:
+	case DRM_FORMAT_XBGR8888:
+	case DRM_FORMAT_ARGB8888:
+	case DRM_FORMAT_ABGR8888:
+	case DRM_FORMAT_RGBX8888:
+	case DRM_FORMAT_BGRX8888:
+	case DRM_FORMAT_RGBA8888:
+	case DRM_FORMAT_BGRA8888:
+	case DRM_FORMAT_ABGR2101010:
+		return true;
+	default:
+		return false;
+	}
+}
+#endif
 
 struct drm_gem_object *mtk_fb_get_gem_obj(struct drm_framebuffer *fb)
 {
@@ -127,12 +161,24 @@ mtk_drm_framebuffer_init(struct drm_device *dev,
 			 struct drm_gem_object *obj)
 {
 	struct mtk_drm_fb *mtk_fb;
+#if IS_ENABLED(CONFIG_CANNON_BRINGUP)
+	struct drm_mode_fb_cmd2 linear_mode;
+#endif
 	int ret;
 
 	mtk_fb = kzalloc(sizeof(*mtk_fb), GFP_KERNEL);
 	if (!mtk_fb)
 		return ERR_PTR(-ENOMEM);
 
+#if IS_ENABLED(CONFIG_CANNON_BRINGUP)
+	if (cannon_fb_has_legacy_blend_hint(mode)) {
+		mtk_fb->legacy_blend_modifier = mode->modifier[0];
+		linear_mode = *mode;
+		linear_mode.modifier[0] = DRM_FORMAT_MOD_LINEAR;
+		mode = &linear_mode;
+		dev_info_once(dev->dev, "cannon: legacy RGB blend hint kept in OVL; KMS layout linear\n");
+	}
+#endif
 	drm_helper_mode_fill_fb_struct(dev, &mtk_fb->base, mode);
 
 	mtk_fb->gem_obj = obj;

@@ -153,6 +153,14 @@ static struct mtk_drm_property mtk_crtc_property[CRTC_PROP_MAX] = {
 	{DRM_MODE_PROP_ATOMIC, "DBI_COUNT_BLOCK_H", 0, ULONG_MAX, 0},
 	{DRM_MODE_PROP_ATOMIC, "DBI_COUNT_BLOCK_V", 0, ULONG_MAX, 0},
 	{DRM_MODE_PROP_ATOMIC, "DBI_COUNT_FENCE_IDX", 0, ULONG_MAX, 0},
+#ifdef CONFIG_CANNON_BRINGUP
+	/* The vendor HWC requires these names even with the features disabled.
+	 * Only the disabled value is supported; enabling must fail validation.
+	 */
+	{DRM_MODE_PROP_ATOMIC, "ICON_ENABLE", 0, 0, 0},
+	{DRM_MODE_PROP_ATOMIC, "ENROLL_ENABLE", 0, 0, 0},
+	{DRM_MODE_PROP_ATOMIC, "SKIP_CONFIG", 0, 0, 0},
+#endif
 };
 
 static struct cmdq_pkt *sb_cmdq_handle;
@@ -2877,6 +2885,12 @@ static int mtk_drm_crtc_set_property(struct drm_crtc *crtc,
 
 	for (i = 0; i < CRTC_PROP_MAX; i++) {
 		if (private->crtc_property[index][i] == property) {
+#ifdef CONFIG_CANNON_BRINGUP
+			if ((i == CRTC_PROP_CANNON_ICON_ENABLE ||
+			     i == CRTC_PROP_CANNON_ENROLL_ENABLE ||
+			     i == CRTC_PROP_CANNON_SKIP_CONFIG) && val)
+				return -EOPNOTSUPP;
+#endif
 			crtc_state->prop_val[i] = val;
 			DDPINFO("crtc:%d set property:%s %llu\n",
 					index, property->name,
@@ -16979,13 +16993,8 @@ void mtk_crtc_first_enable_ddp_config(struct mtk_drm_crtc *mtk_crtc)
 	cfg.h = crtc->mode.vdisplay;
 	cfg.bpc = mtk_crtc->bpc;
 
-	if (output_comp && output_comp->id == DDP_COMPONENT_DSI0) {
-		DDPMSG("%s DSI_STATE_DGB6-9[0x%x 0x%x 0x%x 0x%x]\n", __func__,
-			readl(output_comp->regs + 0x274),
-			readl(output_comp->regs + 0x278),
-			readl(output_comp->regs + 0x27C),
-			readl(output_comp->regs + 0x280));
-	}
+	if (output_comp && output_comp->id == DDP_COMPONENT_DSI0)
+		mtk_dsi_dump_state(output_comp, "first config begin");
 
 	if (output_comp && drm_crtc_index(crtc) == 0) {
 		cfg.w = mtk_ddp_comp_io_cmd(output_comp, NULL,
@@ -17319,21 +17328,9 @@ void mtk_crtc_first_enable_ddp_config(struct mtk_drm_crtc *mtk_crtc)
 	/*store total overhead data*/
 	mtk_crtc_store_total_overhead(mtk_crtc, cfg.tile_overhead);
 
-	if (output_comp && output_comp->id == DDP_COMPONENT_DSI0) {
-		DDPMSG("%s DSI_STATE_DGB6-9[0x%x 0x%x 0x%x 0x%x]\n", __func__,
-			readl(output_comp->regs + 0x274),
-			readl(output_comp->regs + 0x278),
-			readl(output_comp->regs + 0x27C),
-			readl(output_comp->regs + 0x280));
-
-		DDPMSG("%s DSI DEBUG log [0x%x 0x%x 0x%x 0x%x]\n", __func__,
-			readl(output_comp->regs + 0x0c),
-			readl(output_comp->regs + 0x08),
-			readl(output_comp->regs + 0x34),
-			readl(output_comp->regs + 0x400));
-	}
-
 	cmdq_pkt_flush(cmdq_handle);
+	if (output_comp && output_comp->id == DDP_COMPONENT_DSI0)
+		mtk_dsi_dump_state(output_comp, "first config flushed");
 	cmdq_pkt_destroy(cmdq_handle);
 
 	if (mtk_crtc_is_frame_trigger_mode(&mtk_crtc->base)) {

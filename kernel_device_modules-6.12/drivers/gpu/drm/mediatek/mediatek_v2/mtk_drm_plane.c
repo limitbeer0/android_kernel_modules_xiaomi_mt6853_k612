@@ -176,6 +176,10 @@ static struct mtk_drm_property mtk_plane_property[PLANE_PROP_MAX] = {
 	{DRM_MODE_PROP_ATOMIC, "DIRTY_ROI_W", 0, ULONG_MAX, 0},
 	{DRM_MODE_PROP_ATOMIC, "DIRTY_ROI_H", 0, ULONG_MAX, 0},
 	{DRM_MODE_PROP_ATOMIC, "MODE", 0, UINT_MAX, 0},
+#ifdef CONFIG_CANNON_BRINGUP
+	{DRM_MODE_PROP_ATOMIC, "PLANE_PROP_ALPHA_CON", 0, 1, 1},
+	{DRM_MODE_PROP_ATOMIC, "PLANE_PROP_PLANE_ALPHA", 0, 0xff, 0xff},
+#endif
 };
 
 static void mtk_plane_reset(struct drm_plane *plane)
@@ -197,6 +201,10 @@ static void mtk_plane_reset(struct drm_plane *plane)
 	/* Linux alpha property use 16 bit to convey alpha value, so set default to 0xFFFF */
 	plane->state->alpha = DRM_BLEND_ALPHA_OPAQUE;
 	plane->state->pixel_blend_mode = DRM_MODE_BLEND_PIXEL_NONE;
+#ifdef CONFIG_CANNON_BRINGUP
+	state->prop_val[PLANE_PROP_CANNON_ALPHA_CON] = 1;
+	state->prop_val[PLANE_PROP_CANNON_PLANE_ALPHA] = 0xff;
+#endif
 
 	state->base.plane = plane;
 	state->pending.format = DRM_FORMAT_RGB565;
@@ -254,6 +262,13 @@ mtk_plane_duplicate_state(struct drm_plane *plane)
 	}
 
 	state->pending = old_state->pending;
+#ifdef CONFIG_CANNON_BRINGUP
+	/* Blend state must survive a transaction even without PROP_INHERITANCE. */
+	state->prop_val[PLANE_PROP_CANNON_ALPHA_CON] =
+		old_state->prop_val[PLANE_PROP_CANNON_ALPHA_CON];
+	state->prop_val[PLANE_PROP_CANNON_PLANE_ALPHA] = old_state->base.alpha >> 8;
+	state->cannon_legacy_blend = old_state->cannon_legacy_blend;
+#endif
 	state->comp_state = old_state->comp_state;
 	state->crtc = old_state->crtc;
 
@@ -319,6 +334,15 @@ static int mtk_plane_atomic_set_property(struct drm_plane *plane,
 
 	for (i = 0; i < PLANE_PROP_MAX; i++) {
 		if (mtk_plane->plane_property[i] == property) {
+#ifdef CONFIG_CANNON_BRINGUP
+			if (i == PLANE_PROP_CANNON_PLANE_ALPHA) {
+				/* Exact 8-bit to standard 16-bit alpha conversion. */
+				state->alpha = val * 257;
+				plane_state->cannon_legacy_blend = true;
+			} else if (i == PLANE_PROP_CANNON_ALPHA_CON) {
+				plane_state->cannon_legacy_blend = true;
+			}
+#endif
 			plane_state->prop_val[i] = val;
 			DDPDBG("set property:%s %llu\n", property->name, val);
 			return ret;
@@ -348,6 +372,11 @@ static int mtk_plane_atomic_get_property(struct drm_plane *plane,
 	for (i = 0; i < PLANE_PROP_MAX; i++) {
 		if (mtk_plane->plane_property[i] == property) {
 			*val = plane_state->prop_val[i];
+#ifdef CONFIG_CANNON_BRINGUP
+			/* Reflect changes made through the standard alpha alias too. */
+			if (i == PLANE_PROP_CANNON_PLANE_ALPHA)
+				*val = state->alpha >> 8;
+#endif
 			DDPINFO("get property:%s %lld\n", property->name, *val);
 			return ret;
 		}
@@ -596,7 +625,7 @@ static void mtk_plane_atomic_update(struct drm_plane *plane,
 		mtk_plane_state->pending.pitch = pitch;
 		mtk_plane_state->pending.format = fb->format->format;
 		mtk_plane_state->pending.addr = (dma_addr_t)(mtk_crtc->mml_ir_sram.data.paddr);
-		mtk_plane_state->pending.modifier = fb->modifier;
+		mtk_plane_state->pending.modifier = mtk_fb_get_modifier(fb);
 		mtk_plane_state->pending.size = pitch  * height;
 		mtk_plane_state->pending.src_x = crtc_state->mml_src_roi[0].x;
 		mtk_plane_state->pending.src_y = crtc_state->mml_src_roi[0].y;
@@ -622,7 +651,7 @@ static void mtk_plane_atomic_update(struct drm_plane *plane,
 		mtk_plane_state->pending.pitch = pitch;
 		mtk_plane_state->pending.format = fb->format->format;
 		mtk_plane_state->pending.addr = 0;
-		mtk_plane_state->pending.modifier = fb->modifier;
+		mtk_plane_state->pending.modifier = mtk_fb_get_modifier(fb);
 		mtk_plane_state->pending.size = pitch  * height;
 		mtk_plane_state->pending.src_x = 0;
 		mtk_plane_state->pending.src_y = 0;
@@ -638,7 +667,7 @@ static void mtk_plane_atomic_update(struct drm_plane *plane,
 		mtk_plane_state->pending.enable = plane_visible;
 		mtk_plane_state->pending.pitch = fb->pitches[0];
 		mtk_plane_state->pending.format = fb->format->format;
-		mtk_plane_state->pending.modifier = fb->modifier;
+		mtk_plane_state->pending.modifier = mtk_fb_get_modifier(fb);
 		if (mtk_plane_state->prop_val[PLANE_PROP_MODE] == MTK_PLANE_REPLACE_LAYER)
 			mtk_plane_state->pending.addr = mtk_crtc->lk_dma_addr;
 		else if (mtk_plane_state->prop_val[PLANE_PROP_MODE] == MTK_PLANE_REPLACE_LAYER_2)

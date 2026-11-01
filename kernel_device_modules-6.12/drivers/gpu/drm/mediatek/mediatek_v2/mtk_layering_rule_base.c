@@ -46,6 +46,9 @@
 #include "../mml/mtk-mml-drm-adaptor.h"
 #include "mtk_disp_oddmr/mtk_disp_oddmr.h"
 #include "mtk_disp_dbi_count.h"
+#if IS_ENABLED(CONFIG_CANNON_BRINGUP)
+#include "cannon_hwc_abi.h"
+#endif
 
 #include <linux/module.h>
 
@@ -3841,6 +3844,61 @@ static int check_disp_info(struct drm_mtk_layering_info *disp_info)
 	return 0;
 }
 
+#if IS_ENABLED(CONFIG_CANNON_BRINGUP)
+static int cannon_copy_layers_from_user(struct drm_mtk_layer_config *dst,
+				       const void __user *src, unsigned int count)
+{
+	struct cannon_hwc_layer *layers;
+	unsigned int i;
+	int ret = 0;
+
+	static_assert(offsetof(struct drm_mtk_layer_config, buffer_alloc_id) ==
+		      offsetof(struct cannon_hwc_layer, compress));
+	if (count > CANNON_HWC_MAX_LAYERS)
+		return -EINVAL;
+	layers = memdup_user(src, count * sizeof(*layers));
+	if (IS_ERR(layers))
+		return PTR_ERR(layers);
+	for (i = 0; i < count; i++) {
+		/* No unverified translation of the old MML frame structures. */
+		if (layers[i].layer_caps & DISP_MML_CAPS_MASK) {
+			ret = -EOPNOTSUPP;
+			break;
+		}
+		memcpy(&dst[i], &layers[i], offsetof(struct cannon_hwc_layer, compress));
+		dst[i].buffer_alloc_id = 0;
+		dst[i].compress = layers[i].compress;
+		dst[i].secure = layers[i].secure;
+	}
+	kfree(layers);
+	return ret;
+}
+
+static int cannon_copy_layers_to_user(void __user *dst,
+				     const struct drm_mtk_layer_config *src,
+				     unsigned int count)
+{
+	struct cannon_hwc_layer *layers;
+	unsigned int i;
+	int ret = 0;
+
+	if (count > CANNON_HWC_MAX_LAYERS)
+		return -EINVAL;
+	layers = kcalloc(count, sizeof(*layers), GFP_KERNEL);
+	if (!layers)
+		return -ENOMEM;
+	for (i = 0; i < count; i++) {
+		memcpy(&layers[i], &src[i], offsetof(struct cannon_hwc_layer, compress));
+		layers[i].compress = src[i].compress;
+		layers[i].secure = src[i].secure;
+	}
+	if (copy_to_user(dst, layers, count * sizeof(*layers)))
+		ret = -EFAULT;
+	kfree(layers);
+	return ret;
+}
+#endif
+
 static int
 _copy_layer_info_from_disp(struct drm_mtk_layering_info *disp_info_user,
 			   int debug_mode, int disp_idx)
@@ -3875,9 +3933,20 @@ _copy_layer_info_from_disp(struct drm_mtk_layering_info *disp_info_user,
 		DDPPR_ERR("%s:%d invalid mml_cfg[%d]:0x%p\n",
 			__func__, __LINE__,
 			disp_idx, l_info->mml_cfg[disp_idx]);
-		return -ENOMEM;
+		ret = -ENOMEM;
+		goto free_layers;
 	}
 
+#if IS_ENABLED(CONFIG_CANNON_BRINGUP)
+	if (debug_mode == CANNON_LAYERING_LEGACY) {
+		ret = cannon_copy_layers_from_user(l_info->input_config[disp_idx],
+					  disp_info_user->input_config[disp_idx], layer_num);
+		if (ret)
+			goto free_mml;
+		return 0;
+	}
+#endif
+	/* Legacy non-MML jobs use the zeroed native MML buffer above. */
 	if (debug_mode) {
 		memcpy(l_info->input_config[disp_idx],
 		       disp_info_user->input_config[disp_idx], layer_size);
@@ -3890,7 +3959,8 @@ _copy_layer_info_from_disp(struct drm_mtk_layering_info *disp_info_user,
 					l_info->input_config[disp_idx],
 					disp_info_user->input_config[disp_idx],
 					layer_size);
-			return -EFAULT;
+			ret = -EFAULT;
+			goto free_mml;
 		}
 		if (copy_from_user(l_info->mml_cfg[disp_idx],
 				   disp_info_user->mml_cfg[disp_idx],
@@ -3900,27 +3970,44 @@ _copy_layer_info_from_disp(struct drm_mtk_layering_info *disp_info_user,
 					l_info->mml_cfg[disp_idx],
 					disp_info_user->mml_cfg[disp_idx],
 					mml_cfg_size);
-			return -EFAULT;
+			ret = -EFAULT;
+			goto free_mml;
 		}
 	}
 
+	return ret;
+free_mml:
+	vfree(l_info->mml_cfg[disp_idx]);
+	l_info->mml_cfg[disp_idx] = NULL;
+free_layers:
+	vfree(l_info->input_config[disp_idx]);
+	l_info->input_config[disp_idx] = NULL;
 	return ret;
 }
 
 static int set_disp_info(struct drm_mtk_layering_info *disp_info_user,
 			 int debug_mode)
 {
-	int i;
+	int i, ret;
 
 	mutex_lock(&layering_info_lock);
 	memcpy(&layering_info, disp_info_user,
 		sizeof(struct drm_mtk_layering_info));
-
+	/* Only owned allocations belong in the shared working state. */
+	memset(layering_info.input_config, 0, sizeof(layering_info.input_config));
+	memset(layering_info.mml_cfg, 0, sizeof(layering_info.mml_cfg));
 
 	for (i = 0; i < HRT_DISP_TYPE_NUM; i++) {
-		if (_copy_layer_info_from_disp(disp_info_user, debug_mode, i)) {
+		ret = _copy_layer_info_from_disp(disp_info_user, debug_mode, i);
+		if (ret) {
+			while (i--) {
+				vfree(layering_info.input_config[i]);
+				vfree(layering_info.mml_cfg[i]);
+				layering_info.input_config[i] = NULL;
+				layering_info.mml_cfg[i] = NULL;
+			}
 			mutex_unlock(&layering_info_lock);
-			return -EFAULT;
+			return ret;
 		}
 	}
 
@@ -3939,7 +4026,7 @@ _copy_layer_info_by_disp(struct drm_mtk_layering_info *disp_info_user,
 
 	if (l_info->layer_num[disp_idx] <= 0) {
 		/* direct skip */
-		return -EFAULT;
+		return 0;
 	}
 
 	disp_info_user->gles_head[disp_idx] = l_info->gles_head[disp_idx];
@@ -3949,6 +4036,13 @@ _copy_layer_info_by_disp(struct drm_mtk_layering_info *disp_info_user,
 	layer_size = sizeof(struct drm_mtk_layer_config) *
 		     disp_info_user->layer_num[disp_idx];
 
+#if IS_ENABLED(CONFIG_CANNON_BRINGUP)
+	if (debug_mode == CANNON_LAYERING_LEGACY) {
+		ret = cannon_copy_layers_to_user(disp_info_user->input_config[disp_idx],
+						l_info->input_config[disp_idx],
+						disp_info_user->layer_num[disp_idx]);
+	} else
+#endif
 	if (debug_mode) {
 		memcpy(disp_info_user->input_config[disp_idx],
 		       l_info->input_config[disp_idx], layer_size);
@@ -3959,8 +4053,12 @@ _copy_layer_info_by_disp(struct drm_mtk_layering_info *disp_info_user,
 				__LINE__);
 			ret = -EFAULT;
 		}
+	}
+	if (debug_mode != 1) {
 		vfree(l_info->input_config[disp_idx]);
 		vfree(l_info->mml_cfg[disp_idx]);
+		l_info->input_config[disp_idx] = NULL;
+		l_info->mml_cfg[disp_idx] = NULL;
 	}
 
 	return ret;
@@ -3983,8 +4081,12 @@ static int copy_layer_info_to_user(struct drm_device *dev,
 	if ((l_info->disp_idx == 0) && get_layering_opt(LYE_OPT_OVL_BW_MONITOR))
 		disp_info_user->hrt_weight = sum_overlap_w_of_bwm;
 
-	for (i = 0; i < HRT_DISP_TYPE_NUM; i++)
-		_copy_layer_info_by_disp(disp_info_user, debug_mode, i);
+	for (i = 0; i < HRT_DISP_TYPE_NUM; i++) {
+		int copy_ret = _copy_layer_info_by_disp(disp_info_user, debug_mode, i);
+
+		if (!ret)
+			ret = copy_ret;
+	}
 
 	return ret;
 }
@@ -5037,11 +5139,12 @@ static int layering_rule_start(struct drm_mtk_layering_info *disp_info_user,
 		return -EFAULT;
 	}
 
-	if (set_disp_info(disp_info_user, debug_mode)) {
+	ret = set_disp_info(disp_info_user, debug_mode);
+	if (ret) {
 		DRM_MMP_MARK(layering, 0, 2);
 		DRM_MMP_EVENT_END(layering, 0, 0);
 		DDPMSG("set_disp_info fail\n");
-		return -EFAULT;
+		return ret;
 	}
 
 	check_gles_change(&dbg_gles, __LINE__, false);
@@ -5693,6 +5796,60 @@ static int gen_hrt_pattern(struct drm_device *dev)
 #endif
 
 /**** UT Program end ****/
+
+#if IS_ENABLED(CONFIG_CANNON_BRINGUP)
+int cannon_layering_rule_ioctl(struct drm_device *dev, void *data,
+			      struct drm_file *file_priv)
+{
+	struct cannon_hwc_layering *old = data;
+	struct drm_mtk_layering_info info = {0};
+	int i, ret;
+
+	for (i = 0; i < LYE_CRTC; i++) {
+		info.gles_head[i] = -1;
+		info.gles_tail[i] = -1;
+	}
+	for (i = 0; i < CANNON_HWC_DISPLAYS; i++) {
+		if (old->layer_num[i] < 0 || old->layer_num[i] > CANNON_HWC_MAX_LAYERS)
+			return -EINVAL;
+		/* The legacy multi-display and MML protocols need their own port. */
+		if (i && old->layer_num[i])
+			return -EOPNOTSUPP;
+		info.input_config[i] = u64_to_user_ptr(old->input_config[i]);
+		info.disp_mode[i] = old->disp_mode[i];
+		info.disp_mode_idx[i] = old->disp_mode_idx[i];
+		info.layer_num[i] = old->layer_num[i];
+		info.gles_head[i] = old->gles_head[i];
+		info.gles_tail[i] = old->gles_tail[i];
+		if (old->layer_num[i])
+			info.disp_list |= BIT(i);
+	}
+	info.hrt_num = old->hrt_num;
+	info.res_idx = old->res_idx;
+	info.hrt_weight = old->hrt_weight;
+	info.hrt_idx = old->hrt_idx;
+
+	mutex_lock(&layering_rule_lock);
+	ret = layering_rule_start(&info, CANNON_LAYERING_LEGACY, dev);
+	if (!ret) {
+		for (i = 0; i < CANNON_HWC_DISPLAYS; i++) {
+			old->gles_head[i] = info.gles_head[i];
+			old->gles_tail[i] = info.gles_tail[i];
+		}
+		old->hrt_num = info.hrt_num;
+		old->res_idx = info.res_idx;
+		old->hrt_weight = info.hrt_weight;
+		old->hrt_idx = info.hrt_idx;
+		dev_info_once(dev->dev, "cannon: legacy HRT layers=%d ret=0 hrt=%d idx=%u\n",
+			      info.layer_num[0], info.hrt_num, info.hrt_idx);
+	} else {
+		dev_warn_ratelimited(dev->dev, "cannon: legacy HRT layers=%d failed: %d\n",
+				     info.layer_num[0], ret);
+	}
+	mutex_unlock(&layering_rule_lock);
+	return ret;
+}
+#endif
 
 int mtk_layering_rule_ioctl(struct drm_device *dev, void *data,
 			    struct drm_file *file_priv)

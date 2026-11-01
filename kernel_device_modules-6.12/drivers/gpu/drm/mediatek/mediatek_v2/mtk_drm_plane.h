@@ -121,6 +121,10 @@ enum MTK_PLANE_PROP {
 	PLANE_PROP_DIRTY_ROI_W,
 	PLANE_PROP_DIRTY_ROI_H,
 	PLANE_PROP_MODE,
+#ifdef CONFIG_CANNON_BRINGUP
+	PLANE_PROP_CANNON_ALPHA_CON,
+	PLANE_PROP_CANNON_PLANE_ALPHA,
+#endif
 	PLANE_PROP_MAX,
 };
 
@@ -228,6 +232,10 @@ struct mtk_plane_state {
 	uint64_t prop_val[PLANE_PROP_MAX];
 	enum mml_mode mml_mode;
 	struct mml_submit *mml_cfg;
+#ifdef CONFIG_CANNON_BRINGUP
+	/* A legacy alpha property selects the 4.14 framebuffer blend ABI. */
+	bool cannon_legacy_blend;
+#endif
 };
 
 #define to_mtk_plane_state(x) container_of(x, struct mtk_plane_state, base)

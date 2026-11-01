@@ -831,9 +831,18 @@ struct base_jd_atom_v2 {
 	base_jd_core_req core_req;
 	__u8 renderpass_id;
 	__u8 padding[7];
-#if defined(CONFIG_MALI_MTK_GPU_BM_JM)
-	u32 frame_nr;  /* frame number to the atom */
-#endif
+	/* cannon: frame_nr is unconditional on purpose. MIUI's vendor
+	 * libGLES_mali.so was built against the 4.14 mt6853 UAPI, which
+	 * force-enables MTK_GPU_BM_2 for mt6853 (Kbuild-mtk-custom-env
+	 * findstring "mt6885" "mt6873" "mt6853") and carries this field —
+	 * their base_jd_atom is 72 bytes. The 6.12 platform Makefile block
+	 * has no mt6853 entry, so CONFIG_MALI_MTK_GPU_BM_JM is never defined
+	 * and kbase_jd_submit rejected every atom ("Stride 72 passed to
+	 * job_submit isn't supported", test61). Matching the UAPI layout
+	 * here keeps ARM-native strides 48/56/64 accepted as well; the
+	 * kernel-internal katom and its BM_JM gating stay untouched.
+	 */
+	__u32 frame_nr;  /* frame number to the atom */
 };
 
 /**
@@ -882,9 +891,10 @@ typedef struct base_jd_atom {
 	base_jd_core_req core_req;
 	__u8 renderpass_id;
 	__u8 padding[7];
-#if defined(CONFIG_MALI_MTK_GPU_BM_JM)
-	u32 frame_nr;  /* frame number to the atom */
-#endif
+	/* cannon: see base_jd_atom_v2 above — unconditional frame_nr keeps
+	 * this struct 72 bytes, matching the 4.14 mt6853 MTK_GPU_BM_2 UAPI
+	 * that MIUI's Mali userspace was compiled against. */
+	__u32 frame_nr;  /* frame number to the atom */
 } base_jd_atom;
 
 /* Job chain event code bits

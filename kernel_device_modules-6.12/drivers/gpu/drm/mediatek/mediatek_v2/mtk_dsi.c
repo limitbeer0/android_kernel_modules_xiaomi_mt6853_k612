@@ -3703,6 +3703,10 @@ static void mtk_dsi_config_vdo_timing(struct mtk_dsi *dsi)
 #ifdef DSI_SELF_PATTERN
 static void mtk_dsi_self_pattern(struct mtk_dsi *dsi)
 {
+	/* MT6853 has command payload registers here, not a pattern generator. */
+	if (IS_ENABLED(CONFIG_CANNON_BRINGUP))
+		return;
+
 	writel(0x0fff0411, dsi->regs + DSI_SELF_PAT_CON0);
 	writel(0x0fff0fff, dsi->regs + DSI_SELF_PAT_CON1);
 }
@@ -5298,6 +5302,26 @@ void mtk_dsi_start_engine(struct mtk_dsi *dsi)
 		mtk_dsi_start(dsi->slave_dsi);
 }
 EXPORT_SYMBOL_GPL(mtk_dsi_start_engine);
+
+void mtk_dsi_dump_state(struct mtk_ddp_comp *comp, const char *stage)
+{
+	struct mtk_dsi *dsi = container_of(comp, struct mtk_dsi, ddp_comp);
+
+	DDPMSG("%s DSI start=%#x inten=%#x intsta=%#x con=%#x mode=%#x txrx=%#x\n",
+		stage, readl(dsi->regs + DSI_START),
+		readl(dsi->regs + DSI_INTEN), readl(dsi->regs + DSI_INTSTA),
+		readl(dsi->regs + DSI_CON_CTRL(dsi->driver_data)),
+		readl(dsi->regs + DSI_MODE_CTRL(dsi->driver_data)),
+		readl(dsi->regs + DSI_TXRX_CTRL(dsi->driver_data)));
+	DDPMSG("%s DSI dbg6-9=%#x/%#x/%#x/%#x psctrl=%#x vact=%#x cmdq0=%#x\n",
+		stage, readl(dsi->regs + DSI_STATE_DBG6(dsi->driver_data)),
+		readl(dsi->regs + DSI_STATE_DBG7(dsi->driver_data)),
+		readl(dsi->regs + DSI_STATE_DBG8(dsi->driver_data)),
+		readl(dsi->regs + DSI_STATE_DBG9(dsi->driver_data)),
+		readl(dsi->regs + DSI_PSCTRL(dsi->driver_data)),
+		readl(dsi->regs + DSI_VACT_NL(dsi->driver_data)),
+		readl(dsi->regs + dsi->driver_data->reg_cmdq0_ofs));
+}
 
 /***********************Msync 2.0 function start************************/
 EXPORT_SYMBOL_GPL(mtk_preconfig_dsi_enable);
@@ -14171,6 +14195,10 @@ static void mtk_dsi_set_targetline(struct mtk_ddp_comp *comp,
 	struct mtk_drm_crtc *crtc = comp->mtk_crtc;
 	struct mtk_drm_private *priv = (crtc->base).dev->dev_private;
 
+	/* The MT6853 register map has no target-line register or interrupt. */
+	if (IS_ENABLED(CONFIG_CANNON_BRINGUP))
+		return;
+
 	if (priv && priv->data->mmsys_id == MMSYS_MT6993) {
 		val = REG_FLD_VAL(MT6993_TARGET_NL, (hactive * 9) / 10);
 		val1 = REG_FLD_VAL(MT6993_TARGET_NL, 1);
@@ -16662,6 +16690,7 @@ static const struct mtk_dsi_driver_data mt6873_dsi_driver_data = {
 };
 
 static const struct mtk_dsi_driver_data mt6853_dsi_driver_data = {
+	.dsi_shadow_dbg = 0x190,
 	.reg_cmdq0_ofs = 0x200,
 	.reg_cmdq1_ofs = 0x204,
 	.reg_vm_cmd_con_ofs = 0x130,
