@@ -1223,6 +1223,12 @@ CONFIG_REG:
 			da_hs_exit = (da_hs_exit % 2) ? da_hs_exit : da_hs_exit + 1; //must be odd
 		}
 	}
+	/* MT6853 uses this legacy D-PHY path. Match the working 4.14
+	 * TIMECON2 setting when Linux reprograms the PHY after suspend.
+	 */
+	if (priv->data->mmsys_id == MMSYS_MT6853)
+		cont_det = 3;
+
 	dsi->data_phy_cycle = lpx + da_hs_exit + hs_prpr + hs_zero + 2;
 	value = REG_FLD_VAL(FLD_LPX, lpx)
 		| REG_FLD_VAL(FLD_HS_PREP, hs_prpr)
@@ -3483,6 +3489,18 @@ static void mtk_dsi_calc_vdo_timing(struct mtk_dsi *dsi)
 			horizontal_frontporch_byte = horizontal_frontporch_byte + dsi->lanes * 2 - total_bytes % (dsi->lanes * 2);
 		}
 	}
+	/* The MT6853 D-PHY path in 4.14 rounds each horizontal packet's
+	 * word count to four bytes. Preserve that layout when replacing
+	 * the LK timing during resume; newer DSI generations use the
+	 * unaligned/fine-tuned counts calculated above.
+	 */
+	if (ext && ext->params && !ext->params->is_cphy &&
+	    of_device_is_compatible(dsi->dev->of_node, "mediatek,mt6853-dsi")) {
+		horizontal_sync_active_byte = ALIGN_TO(horizontal_sync_active_byte, 4);
+		horizontal_backporch_byte = ALIGN_TO(horizontal_backporch_byte, 4);
+		horizontal_frontporch_byte = ALIGN_TO(horizontal_frontporch_byte, 4);
+	}
+
 	dsi->vfp = t_vfp;
 	dsi->vbp = t_vbp;
 	dsi->vsa = t_vsa;
@@ -5226,6 +5244,8 @@ static void mtk_output_en_doze_switch(struct mtk_dsi *dsi)
 int mtk_preconfig_dsi_enable(struct mtk_dsi *dsi)
 {
 	int ret;
+	bool legacy_panel_init = of_device_is_compatible(dsi->dev->of_node,
+						       "mediatek,mt6853-dsi");
 	struct mtk_panel_ext *ext = mtk_dsi_get_panel_ext(&dsi->ddp_comp);
 	struct mtk_drm_crtc *mtk_crtc =	dsi->is_slave ?
 			dsi->master_dsi->ddp_comp.mtk_crtc : dsi->ddp_comp.mtk_crtc;
@@ -5246,6 +5266,11 @@ int mtk_preconfig_dsi_enable(struct mtk_dsi *dsi)
 	mtk_dsi_stop(dsi);
 	if (dsi->slave_dsi)
 		mtk_dsi_stop(dsi->slave_dsi);
+	/* The MT6853 panel must receive its init table in command mode,
+	 * before the video stream and HS clock are started (as in 4.14).
+	 */
+	if (legacy_panel_init)
+		mtk_dsi_mask(dsi, DSI_MODE_CTRL(dsi->driver_data), MODE, CMD_MODE);
 
 #ifdef DSI_SELF_PATTERN
 	/* Use DSI self pattern as placeholder data until the first real frame
@@ -5274,9 +5299,11 @@ int mtk_preconfig_dsi_enable(struct mtk_dsi *dsi)
 				mtk_dsi_config_vdo_timing(dsi->slave_dsi);
 			mtk_dsi_config_vdo_timing(dsi);
 		}
-		mtk_dsi_set_mode(dsi);
-		if (dsi->slave_dsi)
-			mtk_dsi_set_mode(dsi->slave_dsi);
+		if (!legacy_panel_init) {
+			mtk_dsi_set_mode(dsi);
+			if (dsi->slave_dsi)
+				mtk_dsi_set_mode(dsi->slave_dsi);
+		}
 	}
 
 	mtk_dsi_cmdq_size_sel(dsi);
@@ -5288,7 +5315,7 @@ int mtk_preconfig_dsi_enable(struct mtk_dsi *dsi)
 	mtk_dsi_exit_ulps(dsi, false);
 	if (is_bdg_supported())
 		check_stopstate(NULL);
-	mtk_dsi_clk_hs_mode(dsi, 1);
+	mtk_dsi_clk_hs_mode(dsi, !legacy_panel_init);
 
 	return 0;
 }
@@ -6210,6 +6237,8 @@ static void mtk_output_dsi_enable(struct mtk_dsi *dsi,
 			CRTC_MMP_MARK(0, dsi_resume, 1, 2);
 		}
 		CRTC_MMP_MARK(0, dsi_resume, 1, 3);
+		if (priv->data->mmsys_id == MMSYS_MT6853)
+			mtk_dsi_dump_state(&dsi->ddp_comp, "cannon panel init complete");
 		DDP_PROFILE("[PROFILE] %s panel init end\n", __func__);
 		mode_chg_index = mtk_crtc->mode_change_index;
 
@@ -6344,6 +6373,11 @@ static void mtk_output_dsi_enable(struct mtk_dsi *dsi,
 		if (mtk_dsi_is_LTPO_VM_Enable(dsi))
 			mtk_dsi_mask(dsi, DSI_TXRX_CTRL(dsi->driver_data), EXT_TE_EN, EXT_TE_EN);
 		mtk_dsi_set_mode(dsi->slave_dsi);
+	}
+	if (priv->data->mmsys_id == MMSYS_MT6853) {
+		mtk_dsi_clk_hs_mode(dsi, 1);
+		if (dsi->slave_dsi)
+			mtk_dsi_clk_hs_mode(dsi->slave_dsi, 1);
 	}
 	if (is_bdg_supported()) {
 		if (get_bdg_tx_mode() != CMD_MODE) {
