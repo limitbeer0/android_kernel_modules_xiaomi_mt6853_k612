@@ -1,20 +1,27 @@
 # SPDX-License-Identifier: GPL-2.0
 # Copyright (C) 2020 MediaTek Inc.
 
-MTK_PLATFORM := isp6s
+IMGSENSOR_PLATFORM := isp6s
 
+ifeq ($(CONFIG_CANNON_BRINGUP),y)
+MTK_SENSOR_PROJECT := cannon
+else
 MTK_SENSOR_PROJECT :=
+endif
 MTK_DERIVED_PLATFORM :=
 
 IMGSENSOR_DRIVER_PATH := $(DEVICE_MODULES_PATH)/drivers/misc/mediatek/imgsensor/src
 COMMON_VERSION := v1_1
 subdir-ccflags-y += -I$(IMGSENSOR_DRIVER_PATH)/common/$(COMMON_VERSION) \
-	-I$(IMGSENSOR_DRIVER_PATH)/$(MTK_PLATFORM)/seninf/ \
+	-I$(IMGSENSOR_DRIVER_PATH)/$(IMGSENSOR_PLATFORM)/seninf/ \
 	-I$(DEVICE_MODULES_PATH)/drivers/i2c/busses/ \
 	-I$(DEVICE_MODULES_PATH)/drivers/thermal
 
 obj-$(CONFIG_MTK_IMGSENSOR) += imgsensor_isp6s.o
 imgsensor_isp6s-objs :=
+ifeq ($(CONFIG_CANNON_BRINGUP),y)
+imgsensor_isp6s-objs += camera_project/cannon/cannon-fmeter.o
+endif
 imgsensor_isp6s-objs += ../common/$(COMMON_VERSION)/imgsensor.o
 imgsensor_isp6s-objs += ../common/$(COMMON_VERSION)/imgsensor_hw.o
 imgsensor_isp6s-objs += ../common/$(COMMON_VERSION)/imgsensor_i2c.o
@@ -26,7 +33,9 @@ imgsensor_isp6s-objs += ../common/$(COMMON_VERSION)/seninf_clk.o
 imgsensor_isp6s-objs += ../common/$(COMMON_VERSION)/seninf.o
 
 IMG_COMMON_CODE_PATH := ../common/$(COMMON_VERSION)
+ifneq ($(CONFIG_CANNON_BRINGUP),y)
 include $(IMGSENSOR_DRIVER_PATH)/common/$(COMMON_VERSION)/n3d_fsync/Makefile
+endif
 
 # for adding sensor driver
 define add_subdrv
@@ -36,8 +45,8 @@ $(eval include $(src)/$1/Makefile)
 endef
 
 define FILTER_DRV
-ifeq ($(wildcard $(IMGSENSOR_DRIVER_PATH)/$(MTK_PLATFORM)/camera_project/$(MTK_SENSOR_PROJECT)/$(1)),)
-ifeq ($(wildcard $(IMGSENSOR_DRIVER_PATH)/$(MTK_PLATFORM)/$(1)),)
+ifeq ($(wildcard $(IMGSENSOR_DRIVER_PATH)/$(IMGSENSOR_PLATFORM)/camera_project/$(MTK_SENSOR_PROJECT)/$(1)),)
+ifeq ($(wildcard $(IMGSENSOR_DRIVER_PATH)/$(IMGSENSOR_PLATFORM)/$(1)),)
 ifeq ($(wildcard $(IMGSENSOR_DRIVER_PATH)/common/$(COMMON_VERSION)/$(1)),)
 unknown_drv += $(1)
 else
@@ -74,23 +83,23 @@ $(info project_drv : $(project_drv))
 $(foreach drv, $(project_drv), $(eval $(call add_subdrv,camera_project/$(MTK_SENSOR_PROJECT)/$(drv))))
 endif
 
-ifeq (,$(wildcard $(IMGSENSOR_DRIVER_PATH)/$(MTK_PLATFORM)/camera_project/$(MTK_SENSOR_PROJECT)/camera_hw))
-ifeq (,$(wildcard $(IMGSENSOR_DRIVER_PATH)/$(MTK_PLATFORM)/camera_hw_$(MTK_DERIVED_PLATFORM)))
-subdir-ccflags-y += -I$(IMGSENSOR_DRIVER_PATH)/$(MTK_PLATFORM)/camera_hw
+ifeq (,$(wildcard $(IMGSENSOR_DRIVER_PATH)/$(IMGSENSOR_PLATFORM)/camera_project/$(MTK_SENSOR_PROJECT)/camera_hw))
+ifeq (,$(wildcard $(IMGSENSOR_DRIVER_PATH)/$(IMGSENSOR_PLATFORM)/camera_hw_$(MTK_DERIVED_PLATFORM)))
+subdir-ccflags-y += -I$(IMGSENSOR_DRIVER_PATH)/$(IMGSENSOR_PLATFORM)/camera_hw
 $(eval $(call add_subdrv,camera_hw))
 else
 $(eval $(call add_subdrv,camera_hw_$(MTK_DERIVED_PLATFORM)))
-subdir-ccflags-y		+= -I$(IMGSENSOR_DRIVER_PATH)/$(MTK_PLATFORM)/camera_hw_$(MTK_DERIVED_PLATFORM)
-subdir-ccflags-y		+= -I$(IMGSENSOR_DRIVER_PATH)/$(MTK_PLATFORM)/camera_hw
+subdir-ccflags-y		+= -I$(IMGSENSOR_DRIVER_PATH)/$(IMGSENSOR_PLATFORM)/camera_hw_$(MTK_DERIVED_PLATFORM)
+subdir-ccflags-y		+= -I$(IMGSENSOR_DRIVER_PATH)/$(IMGSENSOR_PLATFORM)/camera_hw
 endif
 ifneq ($(project_drv),)
 $(eval $(call add_subdrv,camera_project/$(MTK_SENSOR_PROJECT)/camera_hw))
 endif
 else
 $(eval $(call add_subdrv,camera_project/$(MTK_SENSOR_PROJECT)/camera_hw))
-subdir-ccflags-y		+= -I$(IMGSENSOR_DRIVER_PATH)/$(MTK_PLATFORM)/camera_project/$(MTK_SENSOR_PROJECT)/camera_hw
-subdir-ccflags-y		+= -I$(IMGSENSOR_DRIVER_PATH)/$(MTK_PLATFORM)/camera_hw_$(MTK_DERIVED_PLATFORM)
-subdir-ccflags-y		+= -I$(IMGSENSOR_DRIVER_PATH)/$(MTK_PLATFORM)/camera_hw
+subdir-ccflags-y		+= -I$(IMGSENSOR_DRIVER_PATH)/$(IMGSENSOR_PLATFORM)/camera_project/$(MTK_SENSOR_PROJECT)/camera_hw
+subdir-ccflags-y		+= -I$(IMGSENSOR_DRIVER_PATH)/$(IMGSENSOR_PLATFORM)/camera_hw_$(MTK_DERIVED_PLATFORM)
+subdir-ccflags-y		+= -I$(IMGSENSOR_DRIVER_PATH)/$(IMGSENSOR_PLATFORM)/camera_hw
 endif
 
 subdir-ccflags-y		+= -I$(IMGSENSOR_DRIVER_PATH)/common/$(COMMON_VERSION)/camera_hw
@@ -98,15 +107,17 @@ subdir-ccflags-y		+= -I$(IMGSENSOR_DRIVER_PATH)/common/$(COMMON_VERSION)/camera_
 ## Enable parallelism
 # subdir-ccflags-y += -DSENSOR_PARALLEISM
 
-ifneq (,$(wildcard $(IMGSENSOR_DRIVER_PATH)/$(MTK_PLATFORM)/seninf_$(MTK_DERIVED_PLATFORM)))
-subdir-ccflags-y += -I$(IMGSENSOR_DRIVER_PATH)/$(MTK_PLATFORM)/seninf_$(MTK_DERIVED_PLATFORM)/
+ifneq (,$(wildcard $(IMGSENSOR_DRIVER_PATH)/$(IMGSENSOR_PLATFORM)/seninf_$(MTK_DERIVED_PLATFORM)))
+subdir-ccflags-y += -I$(IMGSENSOR_DRIVER_PATH)/$(IMGSENSOR_PLATFORM)/seninf_$(MTK_DERIVED_PLATFORM)/
 $(eval $(call add_subdrv,seninf_$(MTK_DERIVED_PLATFORM)))
 else
 $(eval $(call add_subdrv,seninf))
 endif
 
-subdir-ccflags-y += -DNO_I2C_MTK -DNO_CLK_METER -DSENINF_USE_RPM -DDFS_CTRL_BY_OPP
-subdir-ccflags-y += -DSENINF_N3D_SUPPORT
+subdir-ccflags-y += -DNO_I2C_MTK -DNO_CLK_METER -DSENINF_USE_RPM
+ifneq ($(CONFIG_CANNON_BRINGUP),y)
+subdir-ccflags-y += -DSENINF_N3D_SUPPORT -DDFS_CTRL_BY_OPP
+endif
 
 $(info imgsensor_isp6s-objs : $(imgsensor_isp6s-objs))
 $(info imgsensor_isp6s subdir-ccflags-y : $(subdir-ccflags-y))

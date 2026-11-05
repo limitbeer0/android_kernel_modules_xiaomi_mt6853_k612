@@ -579,7 +579,7 @@ int imgsensor_set_driver(struct IMGSENSOR_SENSOR *psensor)
 	imgsensor_i2c_filter_msg(&psensor_inst->i2c_cfg, true);
 
 	while (i < MAX_NUM_OF_SUPPORT_SENSOR && pimgsensor->psensor_list[i]) {
-		PK_DBG("[%s]:[Load Sensor Init][%s]\n", __func__, psensor_inst->psensor_list->name);
+		PK_DBG("[%s]:[Load Sensor Init][%s]\n", __func__, pimgsensor->psensor_list[i]->name);
 		if (pimgsensor->psensor_list[i]->init) {
 			pimgsensor->psensor_list[i]->init(&psensor->pfunc);
 
@@ -2531,12 +2531,17 @@ static int __init imgsensor_init(void)
 		PK_PR_ERR("failed to register CAMERA_HW driver\n");
 		return -ENODEV;
 	}
-	if (seninf_init() < 0)
+	if (seninf_init() < 0) {
+		platform_driver_unregister(&gimgsensor_platform_driver);
 		return -ENODEV;
+	}
 
 #ifdef SENINF_N3D_SUPPORT
-	if (n3d_init() < 0)
+	if (n3d_init() < 0) {
+		seninf_exit();
+		platform_driver_unregister(&gimgsensor_platform_driver);
 		return -ENODEV;
+	}
 #endif
 
 	return 0;

@@ -108,6 +108,7 @@ static enum IMGSENSOR_RETURN regulator_set(
 	struct regulator     *pregulator;
 	struct REGULATOR     *preg = (struct REGULATOR *)pinstance;
 	int reg_type_offset;
+	int voltage, max_voltage;
 	atomic_t             *enable_cnt;
 
 	if (pin > IMGSENSOR_HW_PIN_DOVDD   ||
@@ -126,17 +127,23 @@ static enum IMGSENSOR_RETURN regulator_set(
 
 	if (pregulator) {
 		if (pin_state != IMGSENSOR_HW_PIN_STATE_LEVEL_0) {
-			if (regulator_set_voltage(pregulator,
-				regulator_voltage[
-				pin_state - IMGSENSOR_HW_PIN_STATE_LEVEL_0],
-				regulator_voltage[
-				pin_state - IMGSENSOR_HW_PIN_STATE_LEVEL_0])) {
+			voltage = regulator_voltage[
+				pin_state - IMGSENSOR_HW_PIN_STATE_LEVEL_0];
+			max_voltage = voltage;
+#if IS_ENABLED(CONFIG_CANNON_BRINGUP)
+			/* The original FAN53870 driver rounds up in 8mV steps. */
+			max_voltage += 7999;
+#endif
+			if (regulator_set_voltage(pregulator, voltage, max_voltage)) {
 
 				PK_DBG(
 				  "[regulator]fail to regulator_set_voltage, powertype:%d powerId:%d\n",
 				  pin,
 				  regulator_voltage[
 				  pin_state - IMGSENSOR_HW_PIN_STATE_LEVEL_0]);
+#if IS_ENABLED(CONFIG_CANNON_BRINGUP)
+				return IMGSENSOR_RETURN_ERROR;
+#endif
 			}
 			if (regulator_enable(pregulator)) {
 				PK_DBG(

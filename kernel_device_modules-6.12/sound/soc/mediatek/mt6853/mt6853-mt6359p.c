@@ -7,6 +7,7 @@
  */
 
 #include <linux/module.h>
+#include <linux/of.h>
 #include <linux/pm_runtime.h>
 #include <sound/pcm_params.h>
 #include <sound/soc.h>
@@ -24,6 +25,9 @@
 #include "../../codecs/mt6359p-accdet.h"
 #endif
 #include "../common/mtk-sp-spk-amp.h"
+#if IS_ENABLED(CONFIG_CANNON_AW87XXX)
+#include "../../codecs/cannon-aw87xxx.h"
+#endif
 
 /*
  * if need additional control for the ext spk amp that is connected
@@ -125,6 +129,111 @@ static const struct snd_kcontrol_new mt6853_mt6359p_controls[] = {
 	SOC_ENUM_EXT("MTK_SPK_I2S_IN_TYPE_GET", mt6853_spk_type_enum[1],
 		     mt6853_spk_i2s_in_type_get, NULL),
 };
+
+
+#if IS_ENABLED(CONFIG_CANNON_AW87XXX)
+struct cannon_audio_amps {
+ struct device *speaker;
+ struct device *receiver;
+ unsigned int receiver_mode;
+};
+
+static const char *const cannon_receiver_modes[] = {
+ "SPEAKER_MODE", "RECEIVER_MODE"
+};
+static SOC_ENUM_SINGLE_EXT_DECL(cannon_receiver_enum, cannon_receiver_modes);
+
+static int cannon_receiver_mode_get(struct snd_kcontrol *kcontrol,
+       struct snd_ctl_elem_value *value)
+{
+ struct snd_soc_card *card = snd_kcontrol_chip(kcontrol);
+ struct cannon_audio_amps *amps = snd_soc_card_get_drvdata(card);
+ value->value.enumerated.item[0] = amps->receiver_mode;
+ return 0;
+}
+
+static int cannon_receiver_mode_put(struct snd_kcontrol *kcontrol,
+       struct snd_ctl_elem_value *value)
+{
+ struct snd_soc_card *card = snd_kcontrol_chip(kcontrol);
+ struct cannon_audio_amps *amps = snd_soc_card_get_drvdata(card);
+ unsigned int mode = value->value.enumerated.item[0];
+ if (mode >= ARRAY_SIZE(cannon_receiver_modes))
+  return -EINVAL;
+ if (mode == amps->receiver_mode)
+  return 0;
+ amps->receiver_mode = mode;
+ return 1;
+}
+
+static int cannon_speaker_event(struct snd_soc_dapm_widget *widget,
+          struct snd_kcontrol *kcontrol, int event)
+{
+ struct cannon_audio_amps *amps =
+  snd_soc_card_get_drvdata(widget->dapm->card);
+ return cannon_aw87xxx_set_mode(amps->speaker,
+  SND_SOC_DAPM_EVENT_ON(event) ? CANNON_AMP_SPEAKER : CANNON_AMP_OFF);
+}
+
+static int cannon_receiver_event(struct snd_soc_dapm_widget *widget,
+           struct snd_kcontrol *kcontrol, int event)
+{
+ struct cannon_audio_amps *amps =
+  snd_soc_card_get_drvdata(widget->dapm->card);
+ enum cannon_amp_mode mode = CANNON_AMP_OFF;
+ if (SND_SOC_DAPM_EVENT_ON(event))
+  mode = amps->receiver_mode ? CANNON_AMP_RECEIVER : CANNON_AMP_SPEAKER;
+ return cannon_aw87xxx_set_mode(amps->receiver, mode);
+}
+
+static const struct snd_soc_dapm_widget cannon_amp_widgets[] = {
+ SND_SOC_DAPM_SPK(EXT_SPK_AMP_W_NAME, cannon_speaker_event),
+ SND_SOC_DAPM_SPK("Ext_Receiver_Amp", cannon_receiver_event),
+};
+
+static const struct snd_soc_dapm_route cannon_amp_routes[] = {
+ {EXT_SPK_AMP_W_NAME, NULL, "LINEOUT L"},
+ {"Ext_Receiver_Amp", NULL, "Receiver"},
+ {EXT_SPK_AMP_W_NAME, NULL, "Headphone L Ext Spk Amp"},
+ {"Ext_Receiver_Amp", NULL, "Headphone R Ext Spk Amp"},
+};
+
+static const struct snd_kcontrol_new cannon_amp_controls[] = {
+ SOC_DAPM_PIN_SWITCH(EXT_SPK_AMP_W_NAME),
+ SOC_DAPM_PIN_SWITCH("Ext_Receiver_Amp"),
+ SOC_ENUM_EXT("RCV_AMP_MODE", cannon_receiver_enum,
+  cannon_receiver_mode_get, cannon_receiver_mode_put),
+ SOC_ENUM_EXT("MTK_SPK_TYPE_GET", mt6853_spk_type_enum[0],
+  mt6853_spk_type_get, NULL),
+ SOC_ENUM_EXT("MTK_SPK_I2S_OUT_TYPE_GET", mt6853_spk_type_enum[1],
+  mt6853_spk_i2s_out_type_get, NULL),
+ SOC_ENUM_EXT("MTK_SPK_I2S_IN_TYPE_GET", mt6853_spk_type_enum[1],
+  mt6853_spk_i2s_in_type_get, NULL),
+};
+
+static int cannon_audio_attach_amps(struct snd_soc_card *card,
+           struct device *dev)
+{
+ struct cannon_audio_amps *amps;
+ amps = devm_kzalloc(dev, sizeof(*amps), GFP_KERNEL);
+ if (!amps)
+  return -ENOMEM;
+ amps->speaker = cannon_aw87xxx_get(dev, "speaker-amplifier");
+ if (IS_ERR(amps->speaker))
+  return dev_err_probe(dev, PTR_ERR(amps->speaker), "speaker amplifier\n");
+ amps->receiver = cannon_aw87xxx_get(dev, "receiver-amplifier");
+ if (IS_ERR(amps->receiver))
+  return dev_err_probe(dev, PTR_ERR(amps->receiver), "receiver amplifier\n");
+ snd_soc_card_set_drvdata(card, amps);
+ card->controls = cannon_amp_controls;
+ card->num_controls = ARRAY_SIZE(cannon_amp_controls);
+ card->dapm_widgets = cannon_amp_widgets;
+ card->num_dapm_widgets = ARRAY_SIZE(cannon_amp_widgets);
+ card->dapm_routes = cannon_amp_routes;
+ card->num_dapm_routes = ARRAY_SIZE(cannon_amp_routes);
+ return 0;
+}
+#endif
 
 /*
  * define mtk_spk_i2s_mck node in dts when need mclk,
@@ -1158,7 +1267,8 @@ static struct snd_soc_card mt6853_mt6359p_soc_card = {
 static int mt6853_mt6359p_dev_probe(struct platform_device *pdev)
 {
 	struct snd_soc_card *card = &mt6853_mt6359p_soc_card;
-	struct device_node *platform_node, *spk_node;
+	struct device_node *platform_node, *spk_node, *codec_node;
+	bool cannon = of_machine_is_compatible("xiaomi,cannon");
 	int ret, i;
 	struct snd_soc_dai_link *dai_link;
 
@@ -1183,17 +1293,30 @@ static int mt6853_mt6359p_dev_probe(struct platform_device *pdev)
 	/* get speaker codec node */
 	spk_node = of_get_child_by_name(pdev->dev.of_node,
 					"mediatek,speaker-codec");
-	if (!spk_node) {
+	if (!spk_node && !cannon) {
 		dev_info(&pdev->dev,
 			"spk_node of_get_child_by_name fail\n");
 		return -EINVAL;
 	}
 
+	codec_node = cannon ? of_parse_phandle(pdev->dev.of_node,
+					      "mediatek,audio-codec", 0) : NULL;
+	if (cannon && !codec_node)
+		return -EINVAL;
+	if (cannon) {
+		/* Preserve the card name consumed by the existing MIUI audio HAL. */
+		card->name = "mt6853-mt6359";
+	}
 	for_each_card_prelinks(card, i, dai_link) {
 		if (!dai_link->platforms->name)
 			dai_link->platforms->of_node = platform_node;
+		if (cannon && dai_link->codecs->name &&
+		    !strcmp(dai_link->codecs->name, DEVICE_MT6359_NAME)) {
+			dai_link->codecs->name = NULL;
+			dai_link->codecs->of_node = codec_node;
+		}
 
-		if (!strcmp(dai_link->name, "Speaker Codec")) {
+		if (spk_node && !strcmp(dai_link->name, "Speaker Codec")) {
 			ret = snd_soc_of_get_dai_link_codecs(
 						&pdev->dev, spk_node, dai_link);
 			if (ret < 0) {
@@ -1201,7 +1324,7 @@ static int mt6853_mt6359p_dev_probe(struct platform_device *pdev)
 					"Speaker Codec get_dai_link fail: %d\n", ret);
 				return -EINVAL;
 			}
-		} else if (!strcmp(dai_link->name, "Speaker Codec Ref")) {
+		} else if (spk_node && !strcmp(dai_link->name, "Speaker Codec Ref")) {
 			ret = snd_soc_of_get_dai_link_codecs(
 						&pdev->dev, spk_node, dai_link);
 			if (ret < 0) {
@@ -1212,6 +1335,13 @@ static int mt6853_mt6359p_dev_probe(struct platform_device *pdev)
 		}
 	}
 
+#if IS_ENABLED(CONFIG_CANNON_AW87XXX)
+ if (cannon) {
+  ret = cannon_audio_attach_amps(card, &pdev->dev);
+  if (ret)
+   return ret;
+ }
+#endif
 	card->dev = &pdev->dev;
 
 	ret = devm_snd_soc_register_card(&pdev->dev, card);

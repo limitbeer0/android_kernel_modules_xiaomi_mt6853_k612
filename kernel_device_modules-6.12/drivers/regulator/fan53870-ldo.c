@@ -16,37 +16,36 @@
 #include <linux/regulator/machine.h>
 #include <linux/regulator/of_regulator.h>
 
-#define fan53870_PRODUCT_ID	0x00
-#define fan53870_SILICON_REV	0x01
-#define fan53870_IOUT		0x02
-#define fan53870_LDO_EN		0x03
-#define fan53870_LDO1_VOUT	0x04
-#define fan53870_LDO2_VOUT	0x05
-#define fan53870_LDO3_VOUT	0x06
-#define fan53870_LDO4_VOUT	0x07
-#define fan53870_LDO5_VOUT	0x08
-#define fan53870_LDO6_VOUT	0x09
-#define fan53870_LDO7_VOUT	0x0A
-#define fan53870_LDO1_LDO2_SEQ	0x0b
-#define fan53870_LDO3_LDO4_SEQ	0x0c
-#define fan53870_LDO5_LDO6_SEQ	0x0d
-#define fan53870_LDO7_SEQ		0x0e
-#define fan53870_SEQ_STATUS		0x0f
-#define fan53870_DISCHARGE_ENABLE	0x10
-
+#define fan53870_PRODUCT_ID 0x00
+#define fan53870_SILICON_REV 0x01
+#define fan53870_IOUT 0x02
+#define fan53870_LDO_EN 0x03
+#define fan53870_LDO1_VOUT 0x04
+#define fan53870_LDO2_VOUT 0x05
+#define fan53870_LDO3_VOUT 0x06
+#define fan53870_LDO4_VOUT 0x07
+#define fan53870_LDO5_VOUT 0x08
+#define fan53870_LDO6_VOUT 0x09
+#define fan53870_LDO7_VOUT 0x0A
+#define fan53870_LDO1_LDO2_SEQ 0x0b
+#define fan53870_LDO3_LDO4_SEQ 0x0c
+#define fan53870_LDO5_LDO6_SEQ 0x0d
+#define fan53870_LDO7_SEQ 0x0e
+#define fan53870_SEQ_STATUS 0x0f
+#define fan53870_DISCHARGE_ENABLE 0x10
 
 /* fan53870_LDO1_VSEL ~ fan53870_LDO7_VSEL =
  * 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A
  */
-#define  fan53870_LDO1_VSEL                      fan53870_LDO1_VOUT
-#define  fan53870_LDO2_VSEL                      fan53870_LDO2_VOUT
-#define  fan53870_LDO3_VSEL                      fan53870_LDO3_VOUT
-#define  fan53870_LDO4_VSEL                      fan53870_LDO4_VOUT
-#define  fan53870_LDO5_VSEL                      fan53870_LDO5_VOUT
-#define  fan53870_LDO6_VSEL                      fan53870_LDO6_VOUT
-#define  fan53870_LDO7_VSEL                      fan53870_LDO7_VOUT
+#define fan53870_LDO1_VSEL fan53870_LDO1_VOUT
+#define fan53870_LDO2_VSEL fan53870_LDO2_VOUT
+#define fan53870_LDO3_VSEL fan53870_LDO3_VOUT
+#define fan53870_LDO4_VSEL fan53870_LDO4_VOUT
+#define fan53870_LDO5_VSEL fan53870_LDO5_VOUT
+#define fan53870_LDO6_VSEL fan53870_LDO6_VOUT
+#define fan53870_LDO7_VSEL fan53870_LDO7_VOUT
 
-#define  fan53870_VSEL_MASK                      (0xff << 0)
+#define fan53870_VSEL_MASK (0xff << 0)
 
 enum fan53870_regulators {
 	fan53870_REGULATOR_LDO1 = 0,
@@ -85,18 +84,18 @@ static const struct regmap_range fan53870_volatile_ranges[] = {
 };
 
 static const struct regmap_access_table fan53870_writeable_table = {
-	.yes_ranges	= fan53870_writeable_ranges,
-	.n_yes_ranges	= ARRAY_SIZE(fan53870_writeable_ranges),
+	.yes_ranges = fan53870_writeable_ranges,
+	.n_yes_ranges = ARRAY_SIZE(fan53870_writeable_ranges),
 };
 
 static const struct regmap_access_table fan53870_readable_table = {
-	.yes_ranges	= fan53870_readable_ranges,
-	.n_yes_ranges	= ARRAY_SIZE(fan53870_readable_ranges),
+	.yes_ranges = fan53870_readable_ranges,
+	.n_yes_ranges = ARRAY_SIZE(fan53870_readable_ranges),
 };
 
 static const struct regmap_access_table fan53870_volatile_table = {
-	.yes_ranges	= fan53870_volatile_ranges,
-	.n_yes_ranges	= ARRAY_SIZE(fan53870_volatile_ranges),
+	.yes_ranges = fan53870_volatile_ranges,
+	.n_yes_ranges = ARRAY_SIZE(fan53870_volatile_ranges),
 };
 
 static const struct regmap_config fan53870_regmap_config = {
@@ -117,7 +116,7 @@ static int fan53870_get_status(struct regulator_dev *rdev)
 	ret = regulator_is_enabled_regmap(rdev);
 	if (ret < 0) {
 		dev_info(chip->dev, "Failed to read enable register(%d)\n",
-			ret);
+			 ret);
 		return ret;
 	}
 
@@ -127,7 +126,7 @@ static int fan53870_get_status(struct regulator_dev *rdev)
 	ret = regmap_read(chip->regmap, fan53870_status_reg.sreg, &status);
 	if (ret < 0) {
 		dev_info(chip->dev, "Failed to read status register(%d)\n",
-			ret);
+			 ret);
 		return ret;
 	}
 
@@ -163,79 +162,80 @@ static const struct linear_range fan53870_range2[] = {
 	REGULATOR_LINEAR_RANGE(1500000, 0x10, 0xff, 8000),
 };
 
-#define fan53870_LDO1_VOTAGES		(0xbc)
-#define fan53870_LDO2_VOTAGES		(0xbc)
-#define fan53870_LDO3_VOTAGES		(0x100)
-#define fan53870_LDO4_VOTAGES		(0x100)
-#define fan53870_LDO5_VOTAGES		(0x100)
-#define fan53870_LDO6_VOTAGES		(0x100)
-#define fan53870_LDO7_VOTAGES		(0x100)
+#define fan53870_LDO1_VOTAGES (0xbc)
+#define fan53870_LDO2_VOTAGES (0xbc)
+#define fan53870_LDO3_VOTAGES (0x100)
+#define fan53870_LDO4_VOTAGES (0x100)
+#define fan53870_LDO5_VOTAGES (0x100)
+#define fan53870_LDO6_VOTAGES (0x100)
+#define fan53870_LDO7_VOTAGES (0x100)
 
-#define fan53870_REGL_DESC(_id, _name, _linear_ranges, _min_sel, _min, _step)       \
-	[fan53870_REGULATOR_##_id] = {                             \
-		.name = #_name,                                    \
-		.id = fan53870_REGULATOR_##_id,                    \
-		.of_match = of_match_ptr(#_name),                  \
-		.of_parse_cb = fan53870_of_parse_cb,               \
-		.ops = &fan53870_regl_ops,                         \
-		.regulators_node = of_match_ptr("regulators"),     \
-		.linear_ranges = _linear_ranges,                   \
-		.n_voltages = fan53870_##_id##_VOTAGES,            \
-		.n_linear_ranges = ARRAY_SIZE(_linear_ranges),     \
-		.min_uV = _min,                                    \
-		.uV_step = _step,                              \
-		.linear_min_sel = _min_sel,  \
-		.vsel_mask = fan53870_VSEL_MASK,                   \
-		.vsel_reg = fan53870_##_id##_VSEL,                 \
-		.enable_reg = fan53870_LDO_EN,                     \
-		.enable_mask = BIT(fan53870_REGULATOR_##_id),      \
-		.type = REGULATOR_VOLTAGE,                         \
-		.owner = THIS_MODULE,                              \
+#define fan53870_REGL_DESC(_id, _name, _linear_ranges, _min_sel, _min, _step) \
+	[fan53870_REGULATOR_##_id] = {                                        \
+		.name = #_name,                                               \
+		.id = fan53870_REGULATOR_##_id,                               \
+		.of_match = of_match_ptr(#_name),                             \
+		.of_parse_cb = fan53870_of_parse_cb,                          \
+		.ops = &fan53870_regl_ops,                                    \
+		.regulators_node = of_match_ptr("regulators"),                \
+		.linear_ranges = _linear_ranges,                              \
+		.n_voltages = fan53870_##_id##_VOTAGES,                       \
+		.n_linear_ranges = ARRAY_SIZE(_linear_ranges),                \
+		.min_uV = _min,                                               \
+		.uV_step = _step,                                             \
+		.linear_min_sel = _min_sel,                                   \
+		.vsel_mask = fan53870_VSEL_MASK,                              \
+		.vsel_reg = fan53870_##_id##_VSEL,                            \
+		.enable_reg = fan53870_LDO_EN,                                \
+		.enable_mask = BIT(fan53870_REGULATOR_##_id),                 \
+		.type = REGULATOR_VOLTAGE,                                    \
+		.owner = THIS_MODULE,                                         \
 	}
 
 static struct regulator_desc fan53870_regls_desc[fan53870_MAX_REGULATORS] = {
-	fan53870_REGL_DESC(LDO1, fan53870_ldo1, fan53870_range1, 0x63, 800000, 8000),
-	fan53870_REGL_DESC(LDO2, fan53870_ldo2, fan53870_range1, 0x63, 800000, 8000),
-	fan53870_REGL_DESC(LDO3, fan53870_ldo3, fan53870_range2, 0x10, 1500000, 8000),
-	fan53870_REGL_DESC(LDO4, fan53870_ldo4, fan53870_range2, 0x10, 1500000, 8000),
-	fan53870_REGL_DESC(LDO5, fan53870_ldo5, fan53870_range2, 0x10, 1500000, 8000),
-	fan53870_REGL_DESC(LDO6, fan53870_ldo6, fan53870_range2, 0x10, 1500000, 8000),
-	fan53870_REGL_DESC(LDO7, fan53870_ldo7, fan53870_range2, 0x10, 1500000, 8000),
+	fan53870_REGL_DESC(LDO1, fan53870_ldo1, fan53870_range1, 0x63, 800000,
+			   8000),
+	fan53870_REGL_DESC(LDO2, fan53870_ldo2, fan53870_range1, 0x63, 800000,
+			   8000),
+	fan53870_REGL_DESC(LDO3, fan53870_ldo3, fan53870_range2, 0x10, 1500000,
+			   8000),
+	fan53870_REGL_DESC(LDO4, fan53870_ldo4, fan53870_range2, 0x10, 1500000,
+			   8000),
+	fan53870_REGL_DESC(LDO5, fan53870_ldo5, fan53870_range2, 0x10, 1500000,
+			   8000),
+	fan53870_REGL_DESC(LDO6, fan53870_ldo6, fan53870_range2, 0x10, 1500000,
+			   8000),
+	fan53870_REGL_DESC(LDO7, fan53870_ldo7, fan53870_range2, 0x10, 1500000,
+			   8000),
 };
 
 static int fan53870_regulator_init(struct fan53870 *chip)
 {
-	struct regulator_config config = { };
+	struct regulator_config config = {};
 	struct regulator_desc *rdesc;
 	int id, ret = 0;
 	u8 vsel_range[1];
 
-
 	const unsigned int ldo_regs[fan53870_MAX_REGULATORS] = {
-		fan53870_LDO1_VOUT,
-		fan53870_LDO2_VOUT,
-		fan53870_LDO3_VOUT,
-		fan53870_LDO4_VOUT,
-		fan53870_LDO5_VOUT,
-		fan53870_LDO6_VOUT,
+		fan53870_LDO1_VOUT, fan53870_LDO2_VOUT, fan53870_LDO3_VOUT,
+		fan53870_LDO4_VOUT, fan53870_LDO5_VOUT, fan53870_LDO6_VOUT,
 		fan53870_LDO7_VOUT,
 	};
 
 	const unsigned int initial_voltage[fan53870_MAX_REGULATORS] = {
-		0x00,//LDO1 1.2V main DVDD
-		0x00,//LDO2 1.2V sub  DVDD2
-		0x00,//LDO3 2.8V main AFVDD
-		0x00,//LDO4 2.8V sub AVDD
-		0x00,//LDO5 1.8V DOVDD
-		0x00,//LDO6 2.8V main AVDD
-		0xF1,//LDO7 3.3V p_sensor
+		0x00, //LDO1 1.2V main DVDD
+		0x00, //LDO2 1.2V sub  DVDD2
+		0x00, //LDO3 2.8V main AFVDD
+		0x00, //LDO4 2.8V sub AVDD
+		0x00, //LDO5 1.8V DOVDD
+		0x00, //LDO6 2.8V main AVDD
+		0xF1, //LDO7 3.3V p_sensor
 	};
 
 	/*Disable all ldo output by default*/
 	ret = regmap_write(chip->regmap, fan53870_LDO_EN, 0);
 	if (ret < 0) {
-		dev_info(chip->dev,
-			"Disable all LDO output failed!!!\n");
+		dev_info(chip->dev, "Disable all LDO output failed!!!\n");
 		return ret;
 	}
 
@@ -246,10 +246,11 @@ static int fan53870_regulator_init(struct fan53870 *chip)
 		config.dev = chip->dev;
 		config.driver_data = chip;
 
-		ret = regmap_write(chip->regmap, ldo_regs[id], initial_voltage[id]);
+		ret = regmap_write(chip->regmap, ldo_regs[id],
+				   initial_voltage[id]);
 		if (ret < 0) {
 			dev_info(chip->dev,
-			"Failed to write init voltage register\n");
+				 "Failed to write init voltage register\n");
 			return ret;
 		}
 
@@ -257,42 +258,122 @@ static int fan53870_regulator_init(struct fan53870 *chip)
 				       vsel_range, 1);
 		if (ret < 0) {
 			dev_info(chip->dev,
-				"Failed to read the ldo register\n");
+				 "Failed to read the ldo register\n");
 			return ret;
 		}
-		dev_info(chip->dev, "%s: LDO%d, init value:0x%x\n",
-			__func__, (id+1), vsel_range[0]);
+		dev_info(chip->dev, "%s: LDO%d, init value:0x%x\n", __func__,
+			 (id + 1), vsel_range[0]);
 
-
-		chip->rdev[id] = devm_regulator_register(chip->dev, rdesc,
-							 &config);
+		chip->rdev[id] =
+			devm_regulator_register(chip->dev, rdesc, &config);
 		if (IS_ERR(chip->rdev[id])) {
 			ret = PTR_ERR(chip->rdev[id]);
 			dev_info(chip->dev,
-				"Failed to register regulator(%s):%d\n",
-					chip->rdesc[id]->name, ret);
+				 "Failed to register regulator(%s):%d\n",
+				 chip->rdesc[id]->name, ret);
 			return ret;
 		}
 	}
 
-
 	ret = regmap_write(chip->regmap, fan53870_LDO_EN, 0x40);
 	if (ret < 0) {
-		dev_info(chip->dev,
-		"Failed to write init voltage register\n");
+		dev_info(chip->dev, "Failed to write init voltage register\n");
 		return ret;
 	}
-	ret = regmap_bulk_read(chip->regmap, fan53870_LDO_EN,
-				       vsel_range, 1);
+	ret = regmap_bulk_read(chip->regmap, fan53870_LDO_EN, vsel_range, 1);
 	if (ret < 0) {
-		dev_info(chip->dev,
-			"Failed to read the ldo register\n");
+		dev_info(chip->dev, "Failed to read the ldo register\n");
 		return ret;
 	}
 	if (vsel_range[0] == 0x40)
 		pr_info("%s 3.3v enable success\n", __func__);
 
 	return 0;
+}
+
+/* Cannon keeps the exact signed-DT child nodes and original rail policy. */
+static int fan53870_cannon_init(struct fan53870 *chip)
+{
+	struct device_node *node;
+	unsigned int pid, seen = 0;
+	int ret;
+
+	ret = regmap_read(chip->regmap, fan53870_PRODUCT_ID, &pid);
+	if (ret)
+		return dev_err_probe(chip->dev, ret,
+				     "camera PMIC product ID read failed\n");
+	dev_info(chip->dev, "physical FAN53870 product ID=0x%02x\n", pid);
+
+	for_each_available_child_of_node(chip->dev->of_node, node) {
+		struct regulator_desc *desc;
+		struct regulator_init_data *init;
+		struct regulator_config cfg = {};
+		unsigned int initial, selector, voltage;
+		u16 id;
+
+		if (of_property_read_u16(node, "offset", &id) ||
+		    id >= fan53870_MAX_REGULATORS || (seen & BIT(id))) {
+			ret = -EINVAL;
+			goto put_node;
+		}
+		desc = devm_kmemdup(chip->dev, &fan53870_regls_desc[id],
+				    sizeof(*desc), GFP_KERNEL);
+		if (!desc) {
+			ret = -ENOMEM;
+			goto put_node;
+		}
+		init = of_get_regulator_init_data(chip->dev, node, desc);
+		if (!init || !init->constraints.name) {
+			ret = -EINVAL;
+			goto put_node;
+		}
+		desc->name = init->constraints.name;
+		desc->of_match = NULL;
+		desc->regulators_node = NULL;
+		desc->of_parse_cb = NULL;
+		init->constraints.valid_ops_mask |= REGULATOR_CHANGE_STATUS |
+						    REGULATOR_CHANGE_VOLTAGE;
+		if (!of_property_read_u32(node, "init-voltage", &initial)) {
+			if (initial < desc->min_uV ||
+			    initial > init->constraints.max_uV) {
+				ret = -EINVAL;
+				goto put_node;
+			}
+			selector = DIV_ROUND_UP(initial - desc->min_uV,
+						desc->uV_step) +
+				   desc->linear_min_sel;
+			voltage = desc->min_uV +
+				  (selector - desc->linear_min_sel) *
+					  desc->uV_step;
+			if (selector >= desc->n_voltages ||
+			    voltage > init->constraints.max_uV) {
+				ret = -EINVAL;
+				goto put_node;
+			}
+			ret = regmap_write(chip->regmap, desc->vsel_reg,
+					   selector);
+			if (ret)
+				goto put_node;
+		}
+		cfg.dev = chip->dev;
+		cfg.regmap = chip->regmap;
+		cfg.driver_data = chip;
+		cfg.init_data = init;
+		cfg.of_node = node;
+		chip->rdesc[id] = desc;
+		chip->rdev[id] = devm_regulator_register(chip->dev, desc, &cfg);
+		if (IS_ERR(chip->rdev[id])) {
+			ret = PTR_ERR(chip->rdev[id]);
+			goto put_node;
+		}
+		seen |= BIT(id);
+	}
+	return seen == GENMASK(fan53870_MAX_REGULATORS - 1, 0) ? 0 : -EINVAL;
+
+put_node:
+	of_node_put(node);
+	return dev_err_probe(chip->dev, ret,
+			     "legacy camera regulator registration failed\n");
 }
 
 static int fan53870_i2c_probe(struct i2c_client *client)
@@ -302,31 +383,34 @@ static int fan53870_i2c_probe(struct i2c_client *client)
 	int error, ret, i;
 
 	const unsigned int initial_register[6][2] = {
-		{fan53870_DISCHARGE_ENABLE, 0x7F},
-		{fan53870_LDO1_LDO2_SEQ, 0x00},
-		{fan53870_LDO3_LDO4_SEQ, 0x00},
-		{fan53870_LDO5_LDO6_SEQ, 0x00},
-		{fan53870_LDO7_SEQ, 0x00},
-		{fan53870_SEQ_STATUS, 0x00},
+		{ fan53870_DISCHARGE_ENABLE, 0x7F },
+		{ fan53870_LDO1_LDO2_SEQ, 0x00 },
+		{ fan53870_LDO3_LDO4_SEQ, 0x00 },
+		{ fan53870_LDO5_LDO6_SEQ, 0x00 },
+		{ fan53870_LDO7_SEQ, 0x00 },
+		{ fan53870_SEQ_STATUS, 0x00 },
 	};
 	chip = devm_kzalloc(dev, sizeof(struct fan53870), GFP_KERNEL);
 	if (!chip)
 		return -ENOMEM;
 
-	dev_info(chip->dev, "%s Enter...\n", __func__);
+	dev_info(dev, "%s Enter...\n", __func__);
 
 	i2c_set_clientdata(client, chip);
 	chip->dev = dev;
 	chip->regmap = devm_regmap_init_i2c(client, &fan53870_regmap_config);
 	if (IS_ERR(chip->regmap)) {
 		error = PTR_ERR(chip->regmap);
-		dev_info(dev, "Failed to allocate register map: %d\n",
-			error);
+		dev_info(dev, "Failed to allocate register map: %d\n", error);
 		return error;
 	}
 
+	if (of_machine_is_compatible("xiaomi,cannon"))
+		return fan53870_cannon_init(chip);
+
 	for (i = 0; i < 6; i++) {
-		ret = regmap_write(chip->regmap, initial_register[i][0], initial_register[i][1]);
+		ret = regmap_write(chip->regmap, initial_register[i][0],
+				   initial_register[i][1]);
 		if (ret < 0)
 			dev_info(chip->dev, "Failed to write register\n");
 	}
@@ -343,14 +427,13 @@ static int fan53870_i2c_probe(struct i2c_client *client)
 
 static void fan53870_i2c_remove(struct i2c_client *client)
 {
-	return ;
+	return;
 }
 
 static const struct i2c_device_id fan53870_i2c_id[] = {
-	{"fan53870", 0},
+	{ "fan53870", 0 },
 	{},
 };
-
 
 MODULE_DEVICE_TABLE(i2c, fan53870_i2c_id);
 
@@ -358,7 +441,7 @@ static const struct of_device_id fan53870_dt_ids[] = {
 	{
 		.compatible = "onsemi,fan53870",
 	},
-	{ }
+	{}
 };
 MODULE_DEVICE_TABLE(of, fan53870_dt_ids);
 

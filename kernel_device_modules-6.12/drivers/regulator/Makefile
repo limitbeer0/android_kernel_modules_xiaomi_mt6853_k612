@@ -1,6 +1,8 @@
 # SPDX-License-Identifier: GPL-2.0
 ifeq ($(CONFIG_CANNON_BRINGUP),y)
 obj-$(CONFIG_REGULATOR_MT6359P) += mt6359p-regulator.o
+obj-$(CONFIG_DEVICE_MODULES_REGULATOR_MT6360) += mt6360-regulator.o
+obj-$(CONFIG_REGULATOR_CANNON_FAN53870) += fan53870-ldo.o
 else
 #
 # Makefile for regulator drivers.

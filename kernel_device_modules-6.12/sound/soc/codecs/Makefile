@@ -39,3 +39,5 @@ obj-$(CONFIG_SND_SOC_AK7709)	+= ak7709/
 obj-$(CONFIG_SND_SOC_HFDA80X)	+= hfda80x/
 #obj-$(CONFIG_DEVICE_MODULES_SND_SOC_MT6366)	+= snd-soc-mt6366.o
 obj-$(CONFIG_SND_SOC_FS16XX)    += fs18xx/
+
+obj-$(CONFIG_CANNON_AW87XXX) += cannon-aw87xxx.o

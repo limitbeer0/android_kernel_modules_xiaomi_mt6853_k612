@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: GPL-2.0
 ifeq ($(CONFIG_CANNON_BRINGUP),y)
+obj-$(CONFIG_DEVICE_MODULES_MFD_MT6360) += mt6360-core.o
 obj-$(CONFIG_DEVICE_MODULES_MFD_MT6397) += mt6397.o
 mt6397-y := mt6397-core.o mt6397-irq.o mt6358-irq.o
 else

@@ -145,3 +145,12 @@ source "$(KCONFIG_EXT_PREFIX)/drivers/media/virtio/Kconfig"
 source "$(KCONFIG_EXT_PREFIX)/drivers/video/backlight/Kconfig"
 
 source "$(KCONFIG_EXT_PREFIX)/drivers/trusty/Kconfig"
+
+source "$(KCONFIG_EXT_PREFIX)drivers/misc/mediatek/aw8622_haptic/Kconfig"
+
+source "$(KCONFIG_EXT_PREFIX)drivers/input/fingerprint/Kconfig"
+
+config REGULATOR_CANNON_FAN53870
+	tristate "Cannon FAN53870 camera regulators"
+	depends on CANNON_BRINGUP && I2C && REGULATOR
+	select REGMAP_I2C

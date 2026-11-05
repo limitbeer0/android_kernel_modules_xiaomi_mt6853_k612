@@ -1074,6 +1074,21 @@ static int bm_update_psy_property(struct mtk_battery *gm, enum bm_psy_prop prop)
 		break;
 	case QMAX_DESIGN:
 		ret_val = gm->fg_table_cust_data.fg_profile[0].q_max * 10;
+		if (IS_ENABLED(CONFIG_CANNON_BRINGUP) &&
+		    of_machine_is_compatible("xiaomi,cannon") && gm->algo.active) {
+			int count = gm->fg_table_cust_data.fg_profile[0].size;
+			u32 design_uah;
+
+			if (!of_property_read_u32(gm->profile_node,
+					  "charge-full-design-microamp-hours", &design_uah)) {
+				ret_val = design_uah / 100;
+				break;
+			}
+			/* Fall back to the real legacy curve when no rating is provided. */
+			if (count > 0 && count <= 100)
+				ret_val = gm->fg_table_cust_data.fg_profile[0].
+					fg_profile[count - 1].mah;
+		}
 		break;
 	case QMAX:
 		ret_val = gm->daemon_data.qmxa_t_0ma;
@@ -1838,8 +1853,13 @@ static int mtk_bm_probe(struct platform_device *pdev)
 
 	if (psy == NULL || IS_ERR(psy)) {
 		pr_err("[%s]can not get gauge1 psy\n", __func__);
+  if (IS_ENABLED(CONFIG_CANNON_BRINGUP))
+   return psy ? PTR_ERR(psy) : -EPROBE_DEFER;
 	} else {
 		gauge = (struct mtk_gauge *)power_supply_get_drvdata(psy);
+		if (IS_ENABLED(CONFIG_CANNON_BRINGUP) &&
+		    (!gauge || !gauge->gm || !gauge->gm->is_probe_done))
+			return -EPROBE_DEFER;
 		if (gauge != NULL) {
 			bm->gm1 = gauge->gm;
 			bm->gm1->id = 0;
@@ -1919,7 +1939,8 @@ static int mtk_bm_probe(struct platform_device *pdev)
 		pr_err("[%s]Fail to get chg_psy!\n", __func__);
 
 	bm_battery_service_init(bm);
-	mtk_bm_create_netlink(pdev);
+	if (!device_property_read_bool(bm->dev, "mediatek,kernel-gauge"))
+		mtk_bm_create_netlink(pdev);
 
 	mtk_power_misc_init(bm, &bm->sdc);
 
@@ -1964,9 +1985,17 @@ static struct platform_driver mtk_battery_manager_driver = {
 		.name = "mtk_battery_manager",
 		.pm = &mtk_bm_pm_ops,
 		.of_match_table = mtk_bm_of_match,
+		.suppress_bind_attrs = IS_ENABLED(CONFIG_CANNON_BRINGUP),
 	},
 };
+#if IS_ENABLED(CONFIG_CANNON_BRINGUP)
+int cannon_battery_manager_register(void)
+{
+ return platform_driver_register(&mtk_battery_manager_driver);
+}
+#else
 module_platform_driver(mtk_battery_manager_driver);
+#endif
 
 MODULE_AUTHOR("Wy Chuang<Wy.Chuang@mediatek.com>");
 MODULE_DESCRIPTION("MTK Battery Manager");

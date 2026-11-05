@@ -1127,6 +1127,8 @@ struct shutdown_data {
 };
 
 struct mtk_battery {
+	/* Optional board profile kept separately from the PMIC hardware node. */
+	struct device_node *profile_node;
 	/*linux driver related*/
 	wait_queue_head_t  wait_que;
 	unsigned int fg_update_flag;

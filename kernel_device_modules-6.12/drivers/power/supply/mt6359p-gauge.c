@@ -3842,6 +3842,7 @@ static int mt6359_gauge_probe(struct platform_device *pdev)
 	gauge->psy_desc.get_property = psy_gauge_get_property;
 	gauge->psy_desc.set_property = psy_gauge_set_property;
 	gauge->psy_cfg.drv_data = gauge;
+	gauge->psy_cfg.of_node = pdev->dev.of_node;
 	gauge->psy = power_supply_register(&pdev->dev, &gauge->psy_desc,
 			&gauge->psy_cfg);
 	mt6359_sysfs_create_group(gauge);
@@ -3876,20 +3877,33 @@ static struct platform_driver mt6359_gauge_driver = {
 	.driver = {
 		.name = "mt6359p_gauge",
 		.of_match_table = mt6359_gauge_of_match,
+		.suppress_bind_attrs = IS_ENABLED(CONFIG_CANNON_BRINGUP),
 		},
 };
 
+#if IS_ENABLED(CONFIG_CANNON_BRINGUP)
+int cannon_battery_manager_register(void);
+#endif
 static int __init mt6359_gauge_init(void)
 {
-	return platform_driver_register(&mt6359_gauge_driver);
+ int ret = platform_driver_register(&mt6359_gauge_driver);
+#if IS_ENABLED(CONFIG_CANNON_BRINGUP)
+ if (!ret)
+  ret = cannon_battery_manager_register();
+ if (ret)
+  platform_driver_unregister(&mt6359_gauge_driver);
+#endif
+ return ret;
 }
 module_init(mt6359_gauge_init);
 
+#if !IS_ENABLED(CONFIG_CANNON_BRINGUP)
 static void __exit mt6359_gauge_exit(void)
 {
 	platform_driver_unregister(&mt6359_gauge_driver);
 }
 module_exit(mt6359_gauge_exit);
+#endif
 
 MODULE_AUTHOR("wy.chuang <wy.chuang@mediatek.com>");
 MODULE_DESCRIPTION("MTK Gauge Device Driver");

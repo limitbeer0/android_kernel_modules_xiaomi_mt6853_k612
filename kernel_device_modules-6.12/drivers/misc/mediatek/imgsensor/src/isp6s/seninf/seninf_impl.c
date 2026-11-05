@@ -148,6 +148,8 @@ MINT32 _seninf_set_tg_for_switch(unsigned int cam_tg, unsigned int camsv_tg)
 	return 0;
 }
 
+#endif /* _CAM_MUX_SWITCH */
+
 MINT32 _seninf_irq(MINT32 Irq, void *DeviceId, struct SENINF *pseninf)
 {
 	unsigned int seninf_max_num = 0;
@@ -180,7 +182,3 @@ MINT32 _seninf_irq(MINT32 Irq, void *DeviceId, struct SENINF *pseninf)
 
 	return 0;
 }
-
-#endif
-
-

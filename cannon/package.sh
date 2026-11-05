@@ -28,7 +28,7 @@ case "${WATCHDOG_TEST:-0}" in
 esac
 case "${NATIVE_EXPDB:-0}" in
     0) ;;
-    1) wdt_args+=(--native-expdb) ;;
+    1) wdt_args+=(--native-expdb --watchdog-budget "${WATCHDOG_BUDGET:-600}") ;;
     *) echo "NATIVE_EXPDB must be 0 or 1" >&2; exit 2 ;;
 esac
 case "${ADB_ROOT:-0}" in

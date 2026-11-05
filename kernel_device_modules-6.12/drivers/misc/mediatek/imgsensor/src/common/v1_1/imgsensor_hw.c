@@ -38,6 +38,18 @@ char * const imgsensor_hw_id_names[] = {
 char * const imgsensor_prj_names[] = {
 	"tb8781p2_64"
 };
+static struct IMGSENSOR_HW_CFG *imgsensor_board_config(const char *project,
+                                                        int length)
+{
+#if IS_ENABLED(CONFIG_CANNON_BRINGUP)
+ return imgsensor_custom_config;
+#else
+ if (length && !strncmp(project, imgsensor_prj_names[0], length))
+  return imgsensor_mt8781_config;
+ return imgsensor_custom_config;
+#endif
+}
+
 enum IMGSENSOR_RETURN imgsensor_hw_init(struct IMGSENSOR_HW *phw)
 {
 	struct IMGSENSOR_HW_SENSOR_POWER      *psensor_pwr;
@@ -66,12 +78,7 @@ enum IMGSENSOR_RETURN imgsensor_hw_init(struct IMGSENSOR_HW *phw)
 	for (i = 0; i < IMGSENSOR_SENSOR_IDX_MAX_NUM; i++) {
 		PK_DBG("IMGSENSOR_SENSOR_IDX: %d\n", i);
 
-		if (custlen != 0 && strncmp(prj_name, imgsensor_prj_names[0], custlen)
-			== 0) {
-			pcust_pwr_cfg = imgsensor_mt8781_config;
-		} else {
-			pcust_pwr_cfg = imgsensor_custom_config;
-		}
+		pcust_pwr_cfg = imgsensor_board_config(prj_name, custlen);
 
 
 		while (pcust_pwr_cfg->sensor_idx != i &&
@@ -151,7 +158,10 @@ enum IMGSENSOR_RETURN imgsensor_hw_init(struct IMGSENSOR_HW *phw)
 			} else {
 				PK_DBG("NOTICE: imgsensor_hw_cfg hw_pin:%s, id:%d\n",
 					str_prop_name, IMGSENSOR_HW_ID_NONE);
+#if !IS_ENABLED(CONFIG_CANNON_BRINGUP)
 				ppwr_info->id = IMGSENSOR_HW_ID_NONE;
+#endif
+				/* Cannon's signed legacy DT uses the original board table. */
 			}
 			ppwr_info++;
 		}
@@ -170,12 +180,7 @@ enum IMGSENSOR_RETURN imgsensor_hw_init(struct IMGSENSOR_HW *phw)
 	for (i = 0; i < IMGSENSOR_SENSOR_IDX_MAX_NUM; i++) {
 		psensor_pwr = &phw->sensor_pwr[i];
 
-		if (custlen != 0 && strncmp(prj_name, imgsensor_prj_names[0], custlen)
-			== 0) {
-			pcust_pwr_cfg = imgsensor_mt8781_config;
-		} else {
-			pcust_pwr_cfg = imgsensor_custom_config;
-		}
+		pcust_pwr_cfg = imgsensor_board_config(prj_name, custlen);
 
 		while (pcust_pwr_cfg->sensor_idx != i &&
 		       pcust_pwr_cfg->sensor_idx != IMGSENSOR_SENSOR_IDX_NONE)
@@ -371,6 +376,10 @@ enum IMGSENSOR_RETURN imgsensor_hw_power(
 		ret = IMGSENSOR_RETURN_ERROR;
 		return ret;
 	}
+#if IS_ENABLED(CONFIG_CANNON_BRINGUP)
+	imgsensor_hw_power_sequence(phw, sensor_idx, pwr_status,
+		platform_power_sequence, str_index);
+#else
 	if (IS_MT6873(phw->g_platform_id) || IS_MT6853(phw->g_platform_id))
 		imgsensor_hw_power_sequence(
 				phw,
@@ -392,6 +401,7 @@ enum IMGSENSOR_RETURN imgsensor_hw_power(
 				pwr_status,
 				platform_power_sequence,
 				str_index);
+#endif
 
 	imgsensor_hw_power_sequence(
 			phw,

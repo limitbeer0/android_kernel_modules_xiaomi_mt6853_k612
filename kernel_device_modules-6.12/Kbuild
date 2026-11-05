@@ -9,6 +9,8 @@ obj-y += drivers/soc/mediatek/
 obj-y += drivers/mfd/
 obj-y += drivers/regulator/
 obj-y += drivers/input/keyboard/
+obj-$(CONFIG_CANNON_FPC1022) += drivers/input/fingerprint/
+obj-$(CONFIG_MTK_IMGSENSOR) += drivers/misc/mediatek/imgsensor/src/
 obj-y += drivers/ufs/
 obj-y += drivers/tee/
 obj-y += drivers/char/rpmb/
@@ -39,6 +41,13 @@ obj-y += drivers/leds/
 # cannon: the LM36273 LCD bias IC sits on i2c7; without the mt65xx adapter
 # driver the i2c_lcd_bias client never appears and the backlight stays off.
 obj-y += drivers/i2c/busses/
+obj-y += drivers/iio/adc/
+obj-$(CONFIG_MT635X_EFUSE) += drivers/nvmem/
+obj-y += drivers/power/supply/
+obj-$(CONFIG_MTK_PWM) += drivers/misc/mediatek/pwm/
+obj-$(CONFIG_AW8622_HAPTIC) += drivers/misc/mediatek/aw8622_haptic/
+obj-y += sound/soc/codecs/
+obj-y += sound/soc/mediatek/
 else
 
 ifneq ($(CONFIG_DEVICE_MODULES_ALLOW_BUILTIN),y)

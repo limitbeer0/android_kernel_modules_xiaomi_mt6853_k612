@@ -1,0 +1,167 @@
+// SPDX-License-Identifier: GPL-2.0-only
+// Keep the stock battery profile and wire the native 6.12 PMIC consumers.
+
+&{/pwrap@10026000/mt6359-pmic/mt635x-auxadc} {
+	compatible = "mediatek,mt6359p-auxadc";
+	imp { channel = <15>; resistance-ratio = <7 2>; };
+	imix_r { channel = <16>; };
+};
+
+&{/pwrap@10026000/mt6359-pmic} {
+	cannon_pmic_gauge: gauge {
+		compatible = "mediatek,mt6359p-gauge";
+		mediatek,battery-profile = <&{/battery}>;
+		bootmode = <&{/chosen}>;
+		io-channels = <&{/pwrap@10026000/mt6359-pmic/mt635x-auxadc} 3>,
+			      <&{/pwrap@10026000/mt6359-pmic/mt635x-auxadc} 0>,
+			      <&{/pwrap@10026000/mt6359-pmic/mt635x-auxadc} 14>,
+			      <&{/pwrap@10026000/mt6359-pmic/mt635x-auxadc} 15>,
+			      <&{/pwrap@10026000/mt6359-pmic/mt635x-auxadc} 16>;
+		io-channel-names = "pmic_battery_temp", "pmic_battery_voltage",
+				   "pmic_bif_voltage", "pmic_ptim_voltage", "pmic_ptim_r";
+	};
+
+	cannon_pmic_efuse: efuse {
+		compatible = "mediatek,mt6359p-efuse";
+	};
+
+	cannon_pmic_codec: mt6359codec {
+		compatible = "mediatek,mt6359p-sound";
+		#sound-dai-cells = <1>;
+		io-channels = <&{/pwrap@10026000/mt6359-pmic/mt635x-auxadc} 12>;
+		io-channel-names = "pmic_hpofs_cal";
+		nvmem = <&cannon_pmic_efuse>;
+		nvmem-names = "pmic-hp-efuse";
+		vaud18-supply = <&{/pwrap@10026000/mt6359-pmic/mt6359regulator/ldo_vaud18}>;
+	};
+};
+
+&{/syson@11210000} {
+	compatible = "mediatek,mt6853-audiosys", "syscon";
+};
+
+&{/mt6853-afe-pcm@11210000} {
+	/* Replace the old SCPSYS clock gate with the audio power domain. */
+	clocks = <
+		0x5c 0x0 0x5c 0x7 0x5c 0x8 0x5c 0x6
+		0x5c 0x15 0x5c 0x1 0x5c 0x2 0x5c 0x4
+		0x5c 0x3 0x5c 0x5 0x5c 0x9 0x5c 0xa
+		0x5c 0x12 0x5c 0x13 0x5c 0x14 0x5c 0x16
+		0x5c 0x17 0x5c 0x18 0x5c 0x19 0x5c 0x1a
+		0x2b 0x2e 0x2b 0x37 0x3e 0xb7 0x3e 0xb8
+		0x3e 0x4 0x3e 0xc9 0x3e 0x2e 0x3e 0xca
+		0x3e 0x32 0x3e 0xc5 0x3e 0x30 0x3e 0xc6
+		0x3e 0x34 0x3e 0xd7 0x3e 0xd8 0x3e 0xd9
+		0x3e 0xda 0x3e 0xdb 0x3e 0xdc 0x3e 0xe1
+		0x3e 0xe2 0x3e 0xe3 0x3e 0xe4 0x3e 0xe5
+		0x3e 0xe6 0x3e 0xe7 0x3e 0xd1 0x3e 0x56>;
+	clock-names = "aud_afe_clk",
+		"aud_dac_clk",
+		"aud_dac_predis_clk",
+		"aud_adc_clk",
+		"aud_adda6_adc_clk",
+		"aud_apll22m_clk",
+		"aud_apll24m_clk",
+		"aud_apll1_tuner_clk",
+		"aud_apll2_tuner_clk",
+		"aud_tdm_clk",
+		"aud_tml_clk",
+		"aud_nle",
+		"aud_dac_hires_clk",
+		"aud_adc_hires_clk",
+		"aud_adc_hires_tml",
+		"aud_adda6_adc_hires_clk",
+		"aud_3rd_dac_clk",
+		"aud_3rd_dac_predis_clk",
+		"aud_3rd_dac_tml",
+		"aud_3rd_dac_hires_clk",
+		"aud_infra_clk",
+		"aud_infra_26m_clk",
+		"top_mux_audio",
+		"top_mux_audio_int",
+		"top_mainpll_d4_d4",
+		"top_mux_aud_1",
+		"top_apll1_ck",
+		"top_mux_aud_2",
+		"top_apll2_ck",
+		"top_mux_aud_eng1",
+		"top_apll1_d4",
+		"top_mux_aud_eng2",
+		"top_apll2_d4",
+		"top_i2s0_m_sel",
+		"top_i2s1_m_sel",
+		"top_i2s2_m_sel",
+		"top_i2s3_m_sel",
+		"top_i2s4_m_sel",
+		"top_i2s5_m_sel",
+		"top_apll12_div0",
+		"top_apll12_div1",
+		"top_apll12_div2",
+		"top_apll12_div3",
+		"top_apll12_div4",
+		"top_apll12_divb",
+		"top_apll12_div5",
+		"top_mux_audio_h",
+		"top_clk26m_clk";
+	apmixedsys = <0x54>;
+	infracfg = <0x2b>;
+	power-domains = <0x49 13>;
+};
+
+&{/mt6359_snd} {
+	status = "disabled";
+};
+
+&{/sound} {
+	compatible = "mediatek,mt6853-mt6359p-sound";
+	mediatek,audio-codec = <&cannon_pmic_codec>;
+};
+
+
+// 4.14 used underscore spellings for these SRAM parameters.
+&{/audio_sram@11212000} {
+ prefer-mode = <0>;
+ mode-size = <0x12000 0x18000>;
+ block-size = <0x1000>;
+};
+&{/haptic_pwm} {
+ mediatek,pwm = <&{/pwm@10048000}>;
+};
+
+// MT6853 PWM clock mux lives in INFRACFG_AO at +0x410.
+&{/pwm@10048000} {
+ pwmsrcclk = <0x2b>;
+ mediatek,pwm-version = <0>;
+ mediatek,pwm-topclk-ctl-reg = <0x410>;
+ mediatek,pwm-bclk-sw-ctrl-offset = <12>;
+ mediatek,pwm1-bclk-sw-ctrl-offset = <0>;
+ mediatek,pwm2-bclk-sw-ctrl-offset = <2>;
+ mediatek,pwm3-bclk-sw-ctrl-offset = <4>;
+ mediatek,pwm4-bclk-sw-ctrl-offset = <6>;
+};
+
+// Use the native single-gauge aggregator and real PMIC data.
+// The old MIUI daemon predates the 6.12 manager netlink wrapper.
+&{/battery} {
+ compatible = "mediatek,battery manager";
+ gauge1 = <&cannon_pmic_gauge>;
+ bootmode = <&{/chosen}>;
+ mediatek,kernel-gauge;
+};
+
+// Original 4.14 NTC circuit: 100k thermistor, 100k pull-up, 2.8V reference.
+&{/battery} {
+ RBAT_PULL_UP_R = <100000>;
+ RBAT_PULL_UP_VOLT = <2800>;
+ ACTIVE_TABLE = <5>;
+};
+
+&{/i2c6@11f00000} {
+ compatible = "mediatek,mt6853-i2c";
+ #address-cells = <1>;
+ #size-cells = <0>;
+};
+&{/sound} {
+ speaker-amplifier = <&{/i2c6@11f00000/aw87519@58}>;
+ receiver-amplifier = <&{/i2c6@11f00000/aw87359@59}>;
+};

@@ -760,4 +760,16 @@ void KD_IMGSENSOR_PROFILE_I2C(char *tag, int trans_num);
 
 #define mDELAY(ms)     mdelay(ms)
 #define uDELAY(us)       udelay(us)
+
+/* Cannon O-film sensor identities from the working 4.14 board. */
+#define S5KGM1STOFILM_SENSOR_ID					0xf8d1
+#define S5K3L6OFILM_SENSOR_ID					0x30c6
+#define HI259OFILM_SENSOR_ID                    0x00e1
+#define OV02B10OFILM_SENSOR_ID                  0x002b
+#define OV8856OFILM_SENSOR_ID                   0x885A
+#define SENSOR_DRVNAME_S5KGM1STOFILM_MIPI_RAW 	"s5kgm1stofilm_mipi_raw"
+#define SENSOR_DRVNAME_S5K3L6OFILM_MIPI_RAW 	"s5k3l6ofilm_mipi_raw"
+#define SENSOR_DRVNAME_HI259OFILM_MIPI_RAW      "hi259ofilm_mipi_raw"
+#define SENSOR_DRVNAME_OV02B10OFILM_MIPI_RAW    "ov02b10ofilm_mipi_raw"
+#define SENSOR_DRVNAME_OV8856OFILM_MIPI_RAW     "ov8856ofilm_mipi_raw"
 #endif              /* _KD_IMGSENSOR_H */

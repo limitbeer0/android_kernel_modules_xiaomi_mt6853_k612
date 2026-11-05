@@ -8,6 +8,12 @@
 #include "seninf_clk.h"
 #include "platform_common.h"
 
+#if IS_ENABLED(CONFIG_CANNON_BRINGUP)
+int cannon_mt6853_fmeter_init(struct device *dev);
+unsigned int cannon_mt6853_ckgen_freq(unsigned int id);
+#define mt_get_ckgen_freq cannon_mt6853_ckgen_freq
+#endif
+
 
 #ifdef DFS_CTRL_BY_OPP
 int seninf_dfs_init(struct seninf_dfs_ctx *ctx, struct device *dev)
@@ -189,6 +195,11 @@ enum SENINF_RETURN seninf_clk_init(struct SENINF_CLK *pclk)
 		PK_DBG("[%s] pdev is null\n", __func__);
 		return SENINF_RETURN_ERROR;
 	}
+#if IS_ENABLED(CONFIG_CANNON_BRINGUP)
+	i = cannon_mt6853_fmeter_init(&pclk->pplatform_device->dev);
+	if (i)
+		return i;
+#endif
 	/* get all possible using clocks */
 	for (i = 0; i < SENINF_CLK_IDX_MAX_NUM; i++) {
 		pclk->clk_sel[i] = devm_clk_get(&pclk->pplatform_device->dev,

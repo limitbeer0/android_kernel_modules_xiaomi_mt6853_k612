@@ -8,7 +8,6 @@
 #include "kd_imgsensor_api.h"
 #include <linux/ratelimit.h>
 #include <linux/thermal.h>
-#include "thermal_core.h"
 
 struct IMGSENSOR_I2C gi2c;
 #ifdef SENSOR_PARALLEISM
@@ -97,7 +96,7 @@ static int imgsensor_get_temp(struct thermal_zone_device *tz, int *temperature)
 	s32 temp;
 
 	ret = Get_Camera_Temperature(
-		(enum CAMERA_DUAL_CAMERA_SENSOR_ENUM)tz->devdata,
+		(enum CAMERA_DUAL_CAMERA_SENSOR_ENUM)thermal_zone_device_priv(tz),
 		&valid, &temp);
 
 	if (ret != IMGSENSOR_RETURN_SUCCESS ||

@@ -8,6 +8,7 @@
 /include/ "cannon-display.dtsi"
 /include/ "cannon-gpu.dtsi"
 /include/ "cannon-touch.dtsi"
+/include/ "cannon-power-audio.dtsi"
 
 &{/} {
 	model = "Xiaomi Redmi Note 9 5G (cannon) - 6.12 bring-up";
@@ -301,3 +302,7 @@
 		};
 	};
 };
+
+/include/ "cannon-mt6360.dtsi"
+/include/ "cannon-fpc1022.dtsi"
+/include/ "cannon-camera.dtsi"

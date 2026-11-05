@@ -1,5 +1,10 @@
 # SPDX-License-Identifier: GPL-2.0
 
+ifeq ($(CONFIG_CANNON_BRINGUP),y)
+obj-$(CONFIG_MT635X_EFUSE) += nvmem-mt635x-efuse.o
+nvmem-mt635x-efuse-y := mt635x-efuse.o
+else
+
 #obj-$(CONFIG_MT6681_EFUSE)        += nvmem-mt6681-efuse.o
 #nvmem-mt6681-efuse-y              := mt6681-efuse.o
 
@@ -11,3 +16,4 @@
 # source file, hence the -y mapping (Kbuild composite rule).
 obj-m += nvmem_mtk-devinfo.o
 nvmem_mtk-devinfo-y := mtk-devinfo.o
+endif

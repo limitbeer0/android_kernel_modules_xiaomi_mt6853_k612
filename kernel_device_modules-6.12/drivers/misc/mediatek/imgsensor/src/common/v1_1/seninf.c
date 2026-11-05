@@ -591,7 +591,9 @@ static MINT32 seninf_probe(struct platform_device *pDev)
 	MUINT32 irq_info[3];	/* Record interrupts info from device tree */
 	int irq;
 
-	seninf_reg_char_dev(pseninf);
+	ret = seninf_reg_char_dev(pseninf);
+	if (ret)
+		return ret;
 
 	mutex_init(&pseninf->seninf_mutex);
 	atomic_set(&pseninf->seninf_open_cnt, 0);
@@ -615,7 +617,14 @@ static MINT32 seninf_probe(struct platform_device *pDev)
 
 #if SENINF_CLK_CONTROL
 	pseninf->clk.pplatform_device = pDev;
-	seninf_clk_init(&pseninf->clk);
+	ret = seninf_clk_init(&pseninf->clk);
+	if (ret) {
+		seninf_unreg_char_dev(pseninf);
+#if IS_ENABLED(CONFIG_CANNON_BRINGUP)
+		pm_runtime_disable(pseninf->dev);
+#endif
+		return dev_err_probe(&pDev->dev, ret, "SENINF clock setup failed\n");
+	}
 #endif
 
 #ifdef DFS_CTRL_BY_OPP

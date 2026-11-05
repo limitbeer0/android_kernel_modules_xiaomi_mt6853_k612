@@ -1,0 +1,36 @@
+// SPDX-License-Identifier: GPL-2.0-only
+// Original Cannon clock specifiers, with native camera genpd and providers.
+&{/i2c2@11d21000} {
+ compatible = "mediatek,mt6853-i2c";
+};
+&{/i2c4@11d22000} {
+ compatible = "mediatek,mt6853-i2c";
+};
+&{/i2c8@11d02000} {
+ compatible = "mediatek,mt6853-i2c";
+};
+&{/i2c9@11d03000} {
+ compatible = "mediatek,mt6853-i2c";
+};
+&{/camsys@1a000000} {
+ compatible = "mediatek,mt6853-camsys_main";
+ power-domains = <&{/power-controller@10006000} 15>;
+};
+&{/camsys_a@1a04f000} {
+ compatible = "mediatek,mt6853-camsys_rawa";
+ power-domains = <&{/power-controller@10006000} 16>;
+};
+&{/camsys_b@1a06f000} {
+ compatible = "mediatek,mt6853-camsys_rawb";
+ power-domains = <&{/power-controller@10006000} 17>;
+};
+&{/seninf_top@1a004000} {
+ mediatek,platform = "mt6853";
+ mediatek,seninf_max_num = "6";
+ power-domains = <&{/power-controller@10006000} 15>;
+ clocks = <0x7c 0x5 0x3e 0xc1 0x3e 0xc2 0x3e 0xc3 0x3e 0xad 0x3e 0xae 0x3e 0xaf 0x3e 0xb0 0x3e 0xb1 0x3e 0x56 0x3e 0x17 0x3e 0x29 0x3e 0x16 0x3e 0x57 0x3e 0x18 0x3e 0x19 0x3e 0x3 0x3e 0x21>;
+ clock-names = "CAMSYS_SENINF_CGPDN", "TOP_MUX_SENINF", "TOP_MUX_SENINF1", "TOP_MUX_SENINF2", "TOP_MUX_CAMTG", "TOP_MUX_CAMTG2", "TOP_MUX_CAMTG3", "TOP_MUX_CAMTG4", "TOP_MUX_CAMTG5", "TOP_CLK26M", "TOP_UNIVP_192M_D8", "TOP_UNIVPLL_D6_D8", "TOP_UNIVP_192M_D4", "TOP_F26M_CK_D2", "TOP_UNIVP_192M_D16", "TOP_UNIVP_192M_D32", "TOP_UNIVP_D4_D2", "TOP_MAINP_D5";
+};
+&{/kd_camera_hw1@1a004000} {
+ mediatek,platform = "mt6853";
+};

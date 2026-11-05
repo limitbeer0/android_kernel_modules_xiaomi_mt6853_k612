@@ -79,7 +79,11 @@ def guard_test_fstab(data):
 
 def pack(stock, kernel, dtb, loader, modules, watchdog_test=False, watchdog_android=False,
          crypto_probe=None, crypto_write=False, watchdog_android_long=False, native_expdb=False,
-         adb_root=False):
+         adb_root=False, watchdog_budget=600):
+    if watchdog_budget not in (600, 1800):
+        raise ValueError("unsupported finite watchdog budget")
+    if watchdog_budget != 600 and not native_expdb:
+        raise ValueError("extended budget requires native expdb capture")
     if crypto_write and crypto_probe is None:
         raise ValueError("write test needs a crypto probe")
     if sum((bool(watchdog_test), bool(watchdog_android), bool(watchdog_android_long), crypto_probe is not None)) > 1:
@@ -160,8 +164,18 @@ def pack(stock, kernel, dtb, loader, modules, watchdog_test=False, watchdog_andr
             raise ValueError(f"staged module changed: {name}")
         entries["lib/modules/" + name] = entry(0o100644, data)
     entries["lib/modules/modules.load"] = entry(0o100644, (modules / "modules.load").read_bytes())
+    firmware_dir = Path(__file__).resolve().parent / "firmware"
+    if firmware_dir.is_dir():
+        entries["lib/firmware"] = entry(0o40755)
+        for firmware in sorted(firmware_dir.glob("aw*.bin")):
+            entries["lib/firmware/" + firmware.name] = entry(0o100644, firmware.read_bytes())
     entries["TRAILER!!!"] = entry(0)
     raw_cpio = write_cpio(entries)
+    archive_entries = read_cpio(raw_cpio)
+    for name, (_, data) in entries.items():
+        if name != "TRAILER!!!" and (
+                name not in archive_entries or archive_entries[name][1] != data):
+            raise ValueError(f"ramdisk payload missing or changed: {name}")
     ramdisk = gzip.compress(raw_cpio, mtime=0) if compression == "gzip" else raw_cpio
     # MTK expects a DT table in boot's dtb slot, not a bare FDT.
     old = parts["dtb"]
@@ -187,7 +201,9 @@ def pack(stock, kernel, dtb, loader, modules, watchdog_test=False, watchdog_andr
     if native_expdb:
         if any(arg.startswith(("cannon.log_store=", "cannon.expdb=", "cannon.expdb_seconds=", "mtk_wdt.cannon_budget=")) for arg in cmdline):
             raise ValueError("base boot already selects native log diagnostics")
-        cmdline.extend(("cannon.log_store=1", "cannon.expdb=1", "cannon.expdb_seconds=660", "mtk_wdt.cannon_budget=600"))
+        cmdline.extend(("cannon.log_store=1", "cannon.expdb=1",
+                        f"cannon.expdb_seconds={watchdog_budget + 60}",
+                        f"mtk_wdt.cannon_budget={watchdog_budget}"))
     if adb_root:
         if any(arg.startswith("cannon.adbroot=") for arg in cmdline):
             raise ValueError("base boot already selects adb root")
@@ -231,7 +247,9 @@ def main():
     p.add_argument("--watchdog-android-test", action="store_true")
     p.add_argument("--watchdog-android-long-test", action="store_true")
     p.add_argument("--native-expdb", action="store_true",
-                   help="enable native 512KiB + direct 8MiB expdb capture and a bounded 600s WDT window")
+                   help="enable native 512KiB + direct 8MiB expdb capture and a bounded WDT window")
+    p.add_argument("--watchdog-budget", type=int, choices=(600, 1800), default=600,
+                   help="finite native diagnostic window in seconds")
     p.add_argument("--adb-root", action="store_true", help="enable the diagnostic adbd preload/credentials bootstrap")
     p.add_argument("--crypto-probe", type=Path,
                    help="static ARM64 reader; selects read-only fscrypt diagnostic mode")
@@ -246,15 +264,16 @@ def main():
                  crypto_probe=args.crypto_probe.read_bytes() if args.crypto_probe else None,
                  crypto_write=args.crypto_write,
                  watchdog_android_long=args.watchdog_android_long_test,
-                 native_expdb=args.native_expdb, adb_root=args.adb_root)
+                 native_expdb=args.native_expdb, adb_root=args.adb_root,
+                 watchdog_budget=args.watchdog_budget)
     args.output.write_bytes(image)
     manifest = json.loads((args.modules / "manifest.json").read_text())
     metadata = dict(status="development-image-not-device-validated", size=len(image),
                     native_expdb_requested=args.native_expdb,
                     adb_root_requested=args.adb_root,
-                    bounded_kernel_keepalives=28 if args.native_expdb else 0,
-                    kernel_watchdog_budget_seconds=600 if args.native_expdb else 0,
-                    direct_spool_lifetime_seconds=660 if args.native_expdb else 0,
+                    bounded_kernel_keepalives=(args.watchdog_budget - 30) // 20 if args.native_expdb else 0,
+                    kernel_watchdog_budget_seconds=args.watchdog_budget if args.native_expdb else 0,
+                    direct_spool_lifetime_seconds=args.watchdog_budget + 60 if args.native_expdb else 0,
                     fstab_auto_format_repair_resize=False,
                     diagnostic_watchdog=bool(args.watchdog_test or args.watchdog_android_test or args.watchdog_android_long_test or args.crypto_probe),
                     diagnostic_mode="fscrypt-synthetic-write" if args.crypto_write else

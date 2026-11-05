@@ -6,9 +6,14 @@
 #ifndef __SENINF_CFG_H__
 #define __SENINF_CFG_H__
 
+#if IS_ENABLED(CONFIG_CANNON_BRINGUP)
+#define SENINF_IRQ
+#define SENINF_MAX_NUM 6
+#else
 // #define SENINF_IRQ
 #define _CAM_MUX_SWITCH
 #define SENINF_MAX_NUM 8
+#endif
 
 #define SENINF_MAP_BASE_REG  0x1A004000
 #define SENINF_MAP_BASE_ANA  0x11C80000

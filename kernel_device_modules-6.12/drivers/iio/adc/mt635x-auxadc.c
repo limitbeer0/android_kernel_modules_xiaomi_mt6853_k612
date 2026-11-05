@@ -22,6 +22,7 @@
 #include <linux/power_supply.h>
 #include <linux/regmap.h>
 #include <linux/syscore_ops.h>
+#include <linux/suspend.h>
 
 #include <dt-bindings/iio/mt635x-auxadc.h>
 
@@ -1254,12 +1255,20 @@ static int auxadc_cali_imix_r(struct mt635x_auxadc_device *dev)
 		return 0;
 	}
 	pre_uisoc = cur_uisoc;
+	/* Serialize the sleepable Cannon calibration with IIO conversions. */
+	if (of_machine_is_compatible("xiaomi,cannon"))
+		mutex_lock(&adc_dev->lock);
 	for (i = 0; i < IMIX_R_CALI_CNT; i++) {
 		rac_val[i] = auxadc_get_rac(adc_dev);
 		imix_r_avg += rac_val[i];
-		if (rac_val[i] < 0)
+		if (rac_val[i] < 0) {
+			if (of_machine_is_compatible("xiaomi,cannon"))
+				mutex_unlock(&adc_dev->lock);
 			return -EIO;
+		}
 	}
+	if (of_machine_is_compatible("xiaomi,cannon"))
+		mutex_unlock(&adc_dev->lock);
 	imix_r_avg = imix_r_avg / IMIX_R_CALI_CNT;
 	pr_info("[%s] %d,%d,ravg:%d\n",
 		__func__, rac_val[0], rac_val[1], imix_r_avg);
@@ -1328,6 +1337,31 @@ static int auxadc_suspend_enter(void)
 static struct syscore_ops auxadc_syscore_ops = {
 	.suspend = auxadc_suspend_enter,
 };
+
+/*
+ * Gauge/power-supply reads and regmap accesses may sleep. Cannon's calibration
+ * must run before task freezing, with interrupts and the other CPUs available.
+ */
+static int cannon_auxadc_pm_notify(struct notifier_block *nb,
+          unsigned long event, void *unused)
+{
+ if (event == PM_SUSPEND_PREPARE)
+  auxadc_suspend_enter();
+ return NOTIFY_OK;
+}
+
+static struct notifier_block cannon_auxadc_pm_nb = {
+ .notifier_call = cannon_auxadc_pm_notify,
+};
+
+static void auxadc_unregister_suspend(void *data)
+{
+ if (of_machine_is_compatible("xiaomi,cannon"))
+  unregister_pm_notifier(&cannon_auxadc_pm_nb);
+ else
+  unregister_syscore_ops(&auxadc_syscore_ops);
+}
+
 
 static int auxadc_get_data_from_dt(struct mt635x_auxadc_device *adc_dev,
 				   unsigned int *channel,
@@ -1458,7 +1492,16 @@ static int mt635x_auxadc_probe(struct platform_device *pdev)
 		dev_notice(&pdev->dev, "failed to register iio device!\n");
 		return ret;
 	}
-	register_syscore_ops(&auxadc_syscore_ops);
+ if (of_machine_is_compatible("xiaomi,cannon")) {
+  ret = register_pm_notifier(&cannon_auxadc_pm_nb);
+  if (ret)
+   return ret;
+ } else {
+  register_syscore_ops(&auxadc_syscore_ops);
+ }
+ ret = devm_add_action_or_reset(&pdev->dev, auxadc_unregister_suspend, NULL);
+ if (ret)
+  return ret;
 #if AUXADC_DEBUG
 	switch (chip->chip_id) {
 	case MT6357_CHIP_ID:

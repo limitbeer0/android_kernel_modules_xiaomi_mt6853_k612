@@ -234,3 +234,10 @@ config SND_SOC_HFDA80X
 	  Config of hfda80x. It is a Smart amplifier
 	  It would be set to yes if device with HFDA801/HFDA803 on it.
 endmenu
+
+config CANNON_AW87XXX
+ tristate "Cannon AW87359/AW87519 analogue amplifiers"
+ depends on CANNON_BRINGUP && I2C && SND_SOC_MT6853_MT6359P
+ help
+   Load original vendor register profiles and manage the two external
+   analogue amplifiers through the native MT6853 ASoC machine card.

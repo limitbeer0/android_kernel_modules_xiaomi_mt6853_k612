@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
  * Copyright (c) 2019 MediaTek Inc.
+ * Copyright (C) 2021 XiaoMi, Inc.
  */
 
 #include "kd_imgsensor.h"
@@ -11,6 +12,72 @@
 
 /* Legacy design */
 struct IMGSENSOR_HW_POWER_SEQ sensor_power_sequence[] = {
+/* Cannon O-film sensor identities from the working 4.14 board. */
+#if defined(S5KGM1STOFILM_MIPI_RAW)
+    {
+	SENSOR_DRVNAME_S5KGM1STOFILM_MIPI_RAW,
+        {
+            {RST, Vol_Low, 1},
+            {AVDD, Vol_2800, 0},
+            {DVDD, Vol_1100, 0},
+            {DOVDD, Vol_1800, 1},
+            {AFVDD, Vol_2800, 1},
+            {RST, Vol_High, 10},
+            {SensorMCLK, Vol_High, 1},
+        },
+    },
+#endif
+#if defined(S5K3L6OFILM_MIPI_RAW)
+    {
+        SENSOR_DRVNAME_S5K3L6OFILM_MIPI_RAW,
+        {
+            {RST, Vol_Low, 1},
+            {AVDD, Vol_2800, 0},
+            {DVDD, Vol_1100, 0},
+            {DOVDD, Vol_1800, 1},
+            {RST, Vol_High, 10},
+            {SensorMCLK, Vol_High, 1},
+        },
+    },
+#endif
+#if defined(HI259OFILM_MIPI_RAW)
+    {
+        SENSOR_DRVNAME_HI259OFILM_MIPI_RAW,
+        {
+            {RST, Vol_High, 10},
+            {DOVDD, Vol_1800, 10},
+            {AVDD, Vol_2800, 10},
+            {DVDD, Vol_1800, 1},
+            {SensorMCLK, Vol_High, 1},
+            {RST, Vol_Low, 10},
+        },
+    },
+#endif
+#if defined(OV02B10OFILM_MIPI_RAW)
+    {
+        SENSOR_DRVNAME_OV02B10OFILM_MIPI_RAW,
+        {
+            {RST, Vol_Low, 1},
+            {DOVDD, Vol_1800, 1},
+            {AVDD, Vol_2800, 5},
+            {RST, Vol_High, 10},
+            {SensorMCLK, Vol_High, 1},
+        },
+    },
+#endif
+#if defined(OV8856OFILM_MIPI_RAW)
+    {
+        SENSOR_DRVNAME_OV8856OFILM_MIPI_RAW,
+        {
+            {RST, Vol_Low, 10},
+            {DOVDD, Vol_1800, 1},
+            {AVDD, Vol_2800, 1},
+            {DVDD, Vol_1200, 1},
+            {RST, Vol_High, 10},
+            {SensorMCLK, Vol_High, 1},
+	    },
+    },
+#endif
 #if defined(HI1339_MIPI_RAW)
 		{
 			SENSOR_DRVNAME_HI1339_MIPI_RAW,
@@ -1262,4 +1329,3 @@ struct IMGSENSOR_HW_POWER_SEQ sensor_power_sequence[] = {
 	/* add new sensor before this line */
 	{NULL,},
 };
-

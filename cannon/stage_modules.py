@@ -25,6 +25,14 @@ def main():
     parser.add_argument("--root", action="append", default=[],
                         help="additional current-build module to load (for common device drivers)")
     args = parser.parse_args()
+    # A failed module build may leave an older modules.order behind. Hardware
+    # selected by the current config must not disappear silently at packaging.
+    config_lines = set((args.kernel_out / ".config").read_text().splitlines())
+    for symbol, module in (
+            ("CONFIG_MTK_IMGSENSOR", "imgsensor_isp6s"),
+            ("CONFIG_REGULATOR_CANNON_FAN53870", "fan53870_ldo")):
+        if symbol + "=m" in config_lines:
+            args.root.append(module)
     release = (args.kernel_out / "include/config/kernel.release").read_text().strip()
     # A modules_prepare-only tree has no audited kernel export set.
     for name in ("Module.symvers", "System.map"):

@@ -12,6 +12,7 @@
 #include <linux/kernel.h>
 #include <linux/mfd/core.h>
 #include <linux/module.h>
+#include <linux/of.h>
 #include <linux/regmap.h>
 #include <linux/slab.h>
 
@@ -532,11 +533,47 @@ static const struct regmap_config mt6360_regmap_config = {
 	.readable_reg		= mt6360_is_readwrite_reg,
 };
 
+static void cannon_mt6360_put_client(void *device)
+{
+ put_device(device);
+}
+
+/* Keep the signed overlay's PMIC/LDO client nodes and reuse their clients. */
+static struct i2c_client *
+cannon_mt6360_client(struct i2c_client *pmu, unsigned short address)
+{
+ struct device_node *child;
+ struct i2c_client *client;
+ u32 reg;
+ int ret;
+
+ if (!of_machine_is_compatible("xiaomi,cannon"))
+  return NULL;
+ for_each_available_child_of_node(pmu->adapter->dev.of_node, child) {
+  if (of_property_read_u32(child, "reg", &reg) || reg != address)
+   continue;
+  client = of_find_i2c_device_by_node(child);
+  of_node_put(child);
+  if (!client)
+   return ERR_PTR(-EPROBE_DEFER);
+  if (client->dev.driver) {
+   put_device(&client->dev);
+   return ERR_PTR(-EBUSY);
+  }
+  ret = devm_add_action_or_reset(&pmu->dev, cannon_mt6360_put_client, &client->dev);
+  return ret ? ERR_PTR(ret) : client;
+ }
+ return NULL;
+}
+
 static int mt6360_probe(struct i2c_client *client)
 {
 	struct mt6360_ddata *ddata;
 	int i, ret;
 
+ if (of_device_is_compatible(client->dev.of_node, "mediatek,subpmic") &&
+     !of_machine_is_compatible("xiaomi,cannon"))
+  return -ENODEV;
 	ddata = devm_kzalloc(&client->dev, sizeof(*ddata), GFP_KERNEL);
 	if (!ddata)
 		return -ENOMEM;
@@ -548,9 +585,10 @@ static int mt6360_probe(struct i2c_client *client)
 	ddata->i2c[MT6360_SLAVE_TCPC] = NULL;
 
 	for (i = MT6360_SLAVE_PMIC; i < MT6360_SLAVE_MAX - 1; i++) {
-		ddata->i2c[i] = devm_i2c_new_dummy_device(&client->dev,
-							  client->adapter,
-							  mt6360_slave_addr[i]);
+  ddata->i2c[i] = cannon_mt6360_client(client, mt6360_slave_addr[i]);
+  if (!ddata->i2c[i])
+   ddata->i2c[i] = devm_i2c_new_dummy_device(&client->dev,
+       client->adapter, mt6360_slave_addr[i]);
 		if (IS_ERR(ddata->i2c[i])) {
 			dev_dbg(&client->dev,
 				"Failed to get new dummy I2C device for address 0x%x",
@@ -618,6 +656,7 @@ static SIMPLE_DEV_PM_OPS(mt6360_pm_ops, mt6360_suspend, mt6360_resume);
 
 static const struct of_device_id __maybe_unused mt6360_of_id[] = {
 	{ .compatible = "mediatek,mt6360", },
+	{ .compatible = "mediatek,subpmic", },
 	{},
 };
 MODULE_DEVICE_TABLE(of, mt6360_of_id);

@@ -35,6 +35,31 @@
 #endif
 
 
+/* Cannon's 100k NTC calibration from the working MT6853 4.14 source. */
+static struct fg_temp cannon_fg_temp_table[21] = {
+		{-40, 4251000},
+		{-35, 3005000},
+		{-30, 2149000},
+		{-25, 1554000},
+		{-20, 1135000},
+		{-15, 837800},
+		{-10, 624100},
+		{-5, 469100},
+		{0, 355600},
+		{5, 271800},
+		{10, 209400},
+		{15, 162500},
+		{20, 127000},
+		{25, 100000},
+		{30, 79230},
+		{35, 63180},
+		{40, 50680},
+		{45, 40900},
+		{50, 33190},
+		{55, 27090},
+		{60, 22220}
+};
+
 struct mtk_battery *gmb;
 
 struct tag_bootmode {
@@ -1404,7 +1429,7 @@ void fg_custom_init_from_header(struct mtk_battery *gm)
 	}
 
 	/* init battery temperature table */
-	gm->rbat.type = 10;
+	gm->rbat.type = of_machine_is_compatible("xiaomi,cannon") ? 100 : 10;
 	gm->rbat.rbat_pull_up_r = RBAT_PULL_UP_R;
 	gm->rbat.rbat_pull_up_volt = RBAT_PULL_UP_VOLT;
 	gm->rbat.bif_ntc_r = BIF_NTC_R;
@@ -1650,7 +1675,7 @@ void reload_battery_zcv_table(
 	int ret = 0, column = 0, i;
 	char node_name[128];
 	int bat_id;
-	struct device_node *np = gm->gauge->pdev->dev.of_node;
+	struct device_node *np = gm->profile_node;
 	struct fuel_gauge_table_custom_data *fg_table_cust_data;
 
 	bm_err(gm, "[%s] reload_ZCV by select_zcv %d\n", __func__, select_zcv);
@@ -1698,7 +1723,7 @@ void fg_check_bat_type(struct platform_device *dev,
 	struct mtk_battery *gm)
 {
 	int val = 0, bat_dect = 0;
-	struct device_node *np = dev->dev.of_node;
+	struct device_node *np = gm->profile_node;
 
 	gm->battery_id = 0;
 
@@ -1714,7 +1739,7 @@ void fg_check_bat_type(struct platform_device *dev,
 void fg_custom_init_from_dts(struct platform_device *dev,
 	struct mtk_battery *gm)
 {
-	struct device_node *np = dev->dev.of_node;
+	struct device_node *np = gm->profile_node;
 	unsigned int val = 0;
 	int bat_id, multi_battery = 0, active_table = 0;
 	int i, j, ret, column = 0;
@@ -3216,14 +3241,28 @@ static enum alarmtimer_restart sw_uisoc_timer_callback(
 	return ALARMTIMER_NORESTART;
 }
 
+static void battery_put_profile_node(void *node)
+{
+	of_node_put(node);
+}
+
 int battery_psy_init(struct platform_device *pdev)
 {
 	struct mtk_battery *gm;
 	struct mtk_gauge *gauge;
+	int ret;
 
 	gm = devm_kzalloc(&pdev->dev, sizeof(*gm), GFP_KERNEL);
 	if (!gm)
 		return -ENOMEM;
+	gm->profile_node = of_parse_phandle(pdev->dev.of_node,
+					   "mediatek,battery-profile", 0);
+	if (!gm->profile_node)
+		gm->profile_node = of_node_get(pdev->dev.of_node);
+	ret = devm_add_action_or_reset(&pdev->dev, battery_put_profile_node,
+				       gm->profile_node);
+	if (ret)
+		return ret;
 	bm_err(gm, "[%s] into\n", __func__);
 
 	gauge = dev_get_drvdata(&pdev->dev);
@@ -3354,7 +3393,8 @@ int battery_init(struct platform_device *pdev)
 	gauge = dev_get_drvdata(&pdev->dev);
 	gm = gauge->gm;
 	gm->fixed_bat_tmp = 0xffff;
-	gm->tmp_table = fg_temp_table;
+	gm->tmp_table = of_machine_is_compatible("xiaomi,cannon") ?
+		cannon_fg_temp_table : fg_temp_table;
 	gm->log_level = BMLOG_ERROR_LEVEL;
 	gm->sw_iavg_gap = 3000;
 	gm->in_sleep = false;
@@ -3413,7 +3453,8 @@ int battery_init(struct platform_device *pdev)
 	b_recovery_mode = is_recovery_mode(gm);
 	gm->is_probe_done = true;
 
-	if (ret == 0 && b_recovery_mode == 0)
+	if (ret == 0 && b_recovery_mode == 0 &&
+	    !of_property_read_bool(gm->profile_node, "mediatek,kernel-gauge"))
 		bm_err(gm, "[%s]: daemon mode DONE\n", __func__);
 	else {
 		gm->algo.active = true;

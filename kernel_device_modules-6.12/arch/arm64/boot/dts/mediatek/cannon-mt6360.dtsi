@@ -1,0 +1,68 @@
+// SPDX-License-Identifier: GPL-2.0-only
+// Native MT6360 with stock flat-node regulator constraints kept for signed DTBO.
+&{/i2c5@11d00000} {
+ compatible = "mediatek,mt6853-i2c";
+ mediatek,cannon-i2c-frequency = <400000>;
+ #address-cells = <1>;
+ #size-cells = <0>;
+};
+
+&{/i2c5@11d00000} {
+ // These clients are also declared by the signed stock overlay.
+ // Native MFD reuses them instead of reserving their I2C addresses twice.
+ subpmic_pmic@1a {
+  compatible = "mediatek,subpmic_pmic";
+  reg = <0x1a>;
+  status = "okay";
+ };
+ subpmic_ldo@64 {
+  compatible = "mediatek,subpmic_ldo";
+  reg = <0x64>;
+  status = "okay";
+ };
+ subpmic@34 {
+  reg = <0x34>;
+  status = "okay";
+
+ compatible = "mediatek,mt6360";
+ interrupt-parent = <&{/pinctrl}>;
+ interrupts = <10 8>;
+ interrupt-names = "IRQB";
+ interrupt-controller;
+ #interrupt-cells = <1>;
+ wakeup-source;
+ mediatek,pmic-regulators = <&{/mt6360_pmic_dts}>;
+ mediatek,ldo-regulators = <&{/mt6360_ldo_dts}>;
+
+ regulator {
+  // Original pwr_off_seq = 0x04000002, sdcard_hlact = 0.
+  pwr-off-seq = [04 00 00 02];
+  sdcard-hlact = <0>;
+ };
+
+ cannon_mt6360_adc: adc {
+  compatible = "mediatek,mt6360-adc";
+  #io-channel-cells = <1>;
+ };
+
+ cannon_mt6360_charger: charger {
+  compatible = "mediatek,mt6360-chg";
+  richtek,vinovp-microvolt = <6500000>;
+  usb-otg-vbus {
+   regulator-name = "usb-otg-vbus";
+   regulator-min-microvolt = <4425000>;
+   regulator-max-microvolt = <5825000>;
+  };
+ };
+};
+
+};
+
+&{/battery} {
+ // Confirmed by the working 4.14 Recovery battery and BMS supplies.
+ charge-full-design-microamp-hours = <5000000>;
+ charger = <&cannon_mt6360_charger>;
+ power-supplies = <&cannon_mt6360_charger>;
+ io-channels = <&cannon_mt6360_adc 3>;
+ io-channel-names = "vsys";
+};

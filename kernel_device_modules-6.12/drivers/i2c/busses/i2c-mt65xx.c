@@ -2588,6 +2588,7 @@ static int mtk_i2c_parse_dt(struct device_node *np, struct mtk_i2c *i2c)
 {
 	int ret;
 	unsigned int temp;
+	bool cannon_speed_override = false;
 
 #ifdef CONFIG_FPGA_EARLY_PORTING
 	ret = mt_i2c_fpga_probe_of(np, i2c);
@@ -2597,6 +2598,22 @@ static int mtk_i2c_parse_dt(struct device_node *np, struct mtk_i2c *i2c)
 	ret = of_property_read_u32(np, "clock-frequency", &i2c->speed_hz);
 	if (ret < 0)
 		i2c->speed_hz = I2C_MAX_STANDARD_MODE_FREQ;
+
+	/*
+	 * Signed Cannon DTBO requests the legacy 3.4MHz push-pull setup.
+	 * Let the converted board opt into a normal bus for bring-up without
+	 * rewriting that signed overlay or affecting other I2C controllers.
+	 */
+	if (IS_ENABLED(CONFIG_CANNON_BRINGUP) &&
+	    of_machine_is_compatible("xiaomi,cannon") &&
+	    !of_property_read_u32(np, "mediatek,cannon-i2c-frequency", &temp)) {
+		if (temp != I2C_MAX_STANDARD_MODE_FREQ &&
+		    temp != I2C_MAX_FAST_MODE_FREQ &&
+		    temp != I2C_MAX_FAST_MODE_PLUS_FREQ)
+			return -EINVAL;
+		i2c->speed_hz = temp;
+		cannon_speed_override = true;
+	}
 
 	ret = of_property_read_u32(np, "clock-div", &i2c->clk_src_div);
 	if (ret < 0)
@@ -2634,6 +2651,11 @@ static int mtk_i2c_parse_dt(struct device_node *np, struct mtk_i2c *i2c)
 	i2c->have_pmic = of_property_read_bool(np, "mediatek,have-pmic");
 	i2c->use_push_pull =
 		of_property_read_bool(np, "mediatek,use-push-pull");
+	if (cannon_speed_override) {
+		i2c->use_push_pull = false;
+		dev_info(i2c->dev, "Cannon legacy bus adapted: %u Hz, open-drain\n",
+			 i2c->speed_hz);
+	}
 	of_property_read_u32(np, "scl-gpio-id", &i2c->scl_gpio_id);
 	of_property_read_u32(np, "sda-gpio-id", &i2c->sda_gpio_id);
 	i2c->wake_scp_check_en = of_property_read_bool(np, "mediatek,wake-scp-check-en");

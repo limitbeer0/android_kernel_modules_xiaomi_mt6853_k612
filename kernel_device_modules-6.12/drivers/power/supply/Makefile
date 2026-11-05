@@ -1,4 +1,11 @@
 # SPDX-License-Identifier: GPL-2.0
+ifeq ($(CONFIG_CANNON_BRINGUP),y)
+obj-$(CONFIG_DEVICE_MODULES_CHARGER_MT6360) += mt6360_charger.o
+obj-$(CONFIG_BATTERY_MT6359P) += mt6359p-battery.o
+mt6359p-battery-y := mt6359p-gauge.o mtk_battery.o mtk_battery_algo.o \
+	mtk_battery_coulomb_service.o mtk_battery_daemon.o mtk_battery_interface.o \
+	mtk-battery-manager.o
+else
 subdir-ccflags-$(CONFIG_POWER_SUPPLY_DEBUG) := -DDEBUG
 subdir-ccflags-y += -I$(DEVICE_MODULES_PATH)/drivers/misc/mediatek/usb/usb20/
 subdir-ccflags-y += -I$(DEVICE_MODULES_PATH)/drivers/misc/mediatek/typec/tcpc/inc
@@ -79,3 +86,4 @@ obj-$(CONFIG_XM_QC_MANAGER) += pmic_voter.o
 
 # xaga: platform module wiring
 obj-m += mt6375-charger.o
+endif

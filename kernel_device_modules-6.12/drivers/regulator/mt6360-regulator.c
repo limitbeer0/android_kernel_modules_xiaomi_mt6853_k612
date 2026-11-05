@@ -12,6 +12,7 @@
 #include <linux/regmap.h>
 #include <linux/regulator/driver.h>
 #include <linux/regulator/machine.h>
+#include <linux/regulator/of_regulator.h>
 
 #include <dt-bindings/regulator/mediatek,mt6360-regulator.h>
 
@@ -442,6 +443,36 @@ static int mt6360_regulator_irq_register(struct platform_device *pdev,
 	return 0;
 }
 
+/*
+ * The signed stock DTBO targets the original flat regulator nodes.
+ * Use their exact constraints and phandles without relocating those nodes.
+ */
+static struct device_node *
+cannon_mt6360_profile(struct device *dev, const char *name)
+{
+ static const char *const properties[] = {
+  "mediatek,pmic-regulators", "mediatek,ldo-regulators",
+ };
+ struct device_node *container, *child;
+ const char *match;
+ int i;
+
+ for (i = 0; i < ARRAY_SIZE(properties); i++) {
+  container = of_parse_phandle(dev->of_node, properties[i], 0);
+  if (!container)
+   continue;
+  for_each_available_child_of_node(container, child) {
+   if (!of_property_read_string(child, "regulator-compatible", &match) &&
+       !strcmp(match, name)) {
+    of_node_put(container);
+    return child;
+   }
+  }
+  of_node_put(container);
+ }
+ return NULL;
+}
+
 static int mt6360_regulator_probe(struct platform_device *pdev)
 {
 	struct mt6360_regulator_data *mrd;
@@ -478,6 +509,7 @@ static int mt6360_regulator_probe(struct platform_device *pdev)
 	else
 		dev_info(mrd->dev, "%s, sdcard_hlact: %d\n", __func__, sdcard_hlact);
 
+	fwnode_handle_put(fwnode);
 	config.dev = pdev->dev.parent;
 	config.driver_data = mrd;
 	config.regmap = mrd->regmap;
@@ -486,7 +518,20 @@ static int mt6360_regulator_probe(struct platform_device *pdev)
 		const struct mt6360_regulator_desc *rdesc = mt6360_regulator_descs + i;
 		struct regulator_dev *rdev;
 
+  if (of_machine_is_compatible("xiaomi,cannon")) {
+   config.of_node = cannon_mt6360_profile(pdev->dev.parent, rdesc->desc.name);
+   if (!config.of_node)
+    return dev_err_probe(&pdev->dev, -EINVAL,
+      "missing stock constraints for %s\n", rdesc->desc.name);
+   config.init_data = of_get_regulator_init_data(&pdev->dev,
+     config.of_node, &rdesc->desc);
+   if (!config.init_data) {
+    of_node_put(config.of_node);
+    return -EINVAL;
+   }
+  }
 		rdev = devm_regulator_register(&pdev->dev, &rdesc->desc, &config);
+  of_node_put(config.of_node);
 		if (IS_ERR(rdev)) {
 			dev_dbg(&pdev->dev, "Failed to register  %d regulator\n", i);
 			return PTR_ERR(rdev);

@@ -1,0 +1,6 @@
+config CANNON_FPC1022
+	tristate "Cannon FPC1022 TEE fingerprint resources"
+	depends on CANNON_BRINGUP && SPI && GPIOLIB && INPUT && REGULATOR
+	help
+	  Electrical resources, chip identification and IRQ/sysfs ABI for the
+	  original Cannon FPC1022 HAL. Biometric processing stays in the TEE.

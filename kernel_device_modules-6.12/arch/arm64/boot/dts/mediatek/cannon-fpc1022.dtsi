@@ -1,0 +1,21 @@
+// SPDX-License-Identifier: GPL-2.0-only
+// Keep the stock root device path used by the original fingerprint HAL.
+&{/spi5@11019000} {
+	#address-cells = <1>;
+	#size-cells = <0>;
+	cannon_fpc_spi: fingerprint@0 {
+		compatible = "fpc,fpc1022";
+		reg = <0>;
+		spi-max-frequency = <1000000>;
+		status = "okay";
+	};
+};
+
+&{/fingerprint} {
+	fpc,spi = <&cannon_fpc_spi>;
+	vfp-supply = <&{/mt6360_ldo_dts/ldo1}>;
+	reset-gpios = <&{/pinctrl} 47 0>;
+	irq-gpios = <&{/pinctrl} 48 0>;
+	fpc,enable-wakeup;
+	status = "okay";
+};
