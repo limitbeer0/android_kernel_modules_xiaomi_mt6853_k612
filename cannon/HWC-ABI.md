@@ -54,3 +54,37 @@ Successful frame commits and OVL alpha/premultiply register values with
 opaque, translucent and premultiplied layers remain unverified. Also verify
 that nonzero requests for the disabled-only properties fail. Property
 discovery alone does not prove display output.
+
+## DIM private modifier compatibility (2026-11-20)
+
+MIUI also attaches the old private blend hint 0x0a00000000000000/1 to its
+C8/DIM framebuffer. The existing framebuffer compatibility path normalized
+the hint for RGB formats only. A C8 hint consequently remained in
+drm_framebuffer.modifier and the generic DRM plane-format check rejected
+the whole atomic request with -EINVAL.
+
+A private kprobe trace on test110 captured this exact sequence at uptime
+490.109544: drm_plane_has_format(C8, 0x0a00000000000001) returned false,
+then drm_atomic_check_only and drm_mode_atomic_ioctl returned -22.
+camera_isp was not loaded in that image. The symptom can therefore occur
+before ISP frontend code is present; stopping display IRQs alone had not
+identified the rejection.
+
+Cannon now also accepts C8 in cannon_fb_has_legacy_blend_hint(). The hint
+stays in legacy_blend_modifier for OVL's old blend semantics, while KMS sees
+LINEAR. C8/DIM has no pixel GEM object in this driver. The private tag is
+not advertised as a modern vendor-specific pixel layout, and other formats
+or unrelated modifiers retain their previous validation.
+
+test116 used test110's unchanged Image and DTBs, replacing only DRM in the
+ramdisk. Its DIM framebuffer reports modifier 0. The user confirmed sustained
+picture, touch, DIM/menu interaction and screen off/on. test117 retains
+test113's full ISP/QoS frontend (105 modules) with the same DRM replacement;
+the user also confirmed desktop and wake work after opening and leaving the
+camera. Camera preview remains unavailable and requires separate debugging.
+This test does not establish the outstanding OVL register-value checks above.
+
+The DRM module was rebuilt with Clang 13 and strict modpost; its 574 imports,
+99 exports and vermagic match the old module. Image, kernel version, DTB and
+independent signed DTBO remain unchanged. Runtime debug is restored to 0
+and temporary private kprobe groups are removed after capture.

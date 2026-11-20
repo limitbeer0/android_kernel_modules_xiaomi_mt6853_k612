@@ -60,6 +60,9 @@ enum MTK_DSI_CMD_V2_SCN_OPS {
 	DSI_CMD_V2_SCN_NUM
 };
 
+struct mtk_ddp_comp;
+struct mtk_plane_state;
+
 extern int mtk_disp_hrt_bw_dbg(void);
 extern int mtk_mdp_rsz_bypass_info(struct mtk_ddp_comp *comp);
 

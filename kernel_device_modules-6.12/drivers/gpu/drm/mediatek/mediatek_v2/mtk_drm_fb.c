@@ -47,6 +47,8 @@ static bool cannon_fb_has_legacy_blend_hint(const struct drm_mode_fb_cmd2 *mode)
 	if ((mode->modifier[0] & ~1ULL) != 0x0a00000000000000ULL)
 		return false;
 	switch (mode->pixel_format) {
+	/* DIM has no pixel buffer, but MIUI still tags its blend semantics. */
+	case DRM_FORMAT_C8:
 	case DRM_FORMAT_XRGB8888:
 	case DRM_FORMAT_XBGR8888:
 	case DRM_FORMAT_ARGB8888:
@@ -176,7 +178,7 @@ mtk_drm_framebuffer_init(struct drm_device *dev,
 		linear_mode = *mode;
 		linear_mode.modifier[0] = DRM_FORMAT_MOD_LINEAR;
 		mode = &linear_mode;
-		dev_info_once(dev->dev, "cannon: legacy RGB blend hint kept in OVL; KMS layout linear\n");
+		dev_info_once(dev->dev, "cannon: legacy blend hint kept in OVL; KMS layout linear\n");
 	}
 #endif
 	drm_helper_mode_fill_fb_struct(dev, &mtk_fb->base, mode);
