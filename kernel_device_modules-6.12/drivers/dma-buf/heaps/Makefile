@@ -10,4 +10,4 @@ ccflags-y += -I$(src)
 ccflags-y += -I$(DEVICE_MODULES_PATH)/drivers/iommu/arm/arm-smmu-v3/
 obj-m += mtk_system_heap.o
 mtk_system_heap-y := mtk-deferred-free-helper.o mtk_cache_pool.o \
-	mtk_dmabuf_monitor.o mtk_page_pool.o mtk_system_heap.o
+	mtk_dmabuf_monitor.o mtk_page_pool.o mtk_system_heap_main.o

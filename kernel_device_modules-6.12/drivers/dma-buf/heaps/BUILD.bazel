@@ -31,7 +31,7 @@ define_mgk_ddk_ko(
         "mtk_cache_pool.c",
         "mtk_dmabuf_monitor.c",
         "mtk_page_pool.c",
-        "mtk_system_heap.c",
+        "mtk_system_heap_main.c",
     ],
     hdrs = glob([
         "mtk-deferred-free-helper.h",
