@@ -35,7 +35,7 @@
 #include <linux/dma-mapping.h>
 #include <linux/suspend.h>
 
-#include <soc/mediatek/smi.h>
+#include "smi.h" /* Device-module SMI debug API, with optional stubs. */
 
 /* MET: define to enable MET */
 /* GKI: not support MET yet */
@@ -1736,6 +1736,17 @@ static void ISP_DumpDebugData(enum ISP_IRQ_TYPE_ENUM module, unsigned int debug_
 	ISP_WR32(CAM_REG_DBG_SET(innerRegModule), 0x00040000);
 }
 
+/* The optional SMI debug module is independent of the SMI bus provider. */
+static void isp_smi_hang_detect(char *reason)
+{
+#if IS_REACHABLE(CONFIG_MTK_SMI_DEBUG)
+	mtk_smi_dbg_hang_detect(reason);
+#else
+	pr_notice_ratelimited("[ISP] %s: optional SMI debug driver is disabled\n",
+			      reason);
+#endif
+}
+
 void dumpAllRegs(enum ISP_DEV_NODE_ENUM module)
 {
 	unsigned int i = 0;
@@ -2846,7 +2857,7 @@ static inline void ISP_Reset(int module)
 				(unsigned int)ISP_RD32(CAMSYS_REG_CG_CLR));
 
 				//dump smi for debugging
-				mtk_smi_dbg_hang_detect("camera_isp:Reset");
+				isp_smi_hang_detect("camera_isp:Reset");
 
 				bDumped = MTRUE;
 				break;
@@ -4072,7 +4083,7 @@ static inline void ISP_StopHW(unsigned int module)
 			}
 
 			//dump smi for debugging
-			mtk_smi_dbg_hang_detect("camera_isp:StopHW");
+			isp_smi_hang_detect("camera_isp:StopHW");
 
 			break;
 		}
@@ -11805,10 +11816,10 @@ static void SMI_INFO_DUMP(enum ISP_IRQ_TYPE_ENUM irq_module)
 				LOG_NOTICE("ERR:SMI_DUMP by module:%d\n",
 					   irq_module);
 
-				mtk_smi_dbg_hang_detect("camera_isp");
+				isp_smi_hang_detect("camera_isp");
 
 			} else if (irq_module == ISP_IRQ_TYPE_INT_CAM_B_ST) {
-				mtk_smi_dbg_hang_detect("camera_isp_camb");
+				isp_smi_hang_detect("camera_isp_camb");
 			}
 			g_ISPIntStatus_SMI[irq_module].ispIntErr =
 				g_ISPIntStatus_SMI[irq_module].ispInt5Err = 0;
@@ -11857,7 +11868,7 @@ EXIT_CQ_RECOVER:
 				LOG_NOTICE("ERR:SMI_DUMP by module:%d\n",
 					   irq_module);
 
-				mtk_smi_dbg_hang_detect("camera_isp_camsv");
+				isp_smi_hang_detect("camera_isp_camsv");
 
 			}
 			g_ISPIntStatus_SMI[irq_module].ispIntErr = 0;

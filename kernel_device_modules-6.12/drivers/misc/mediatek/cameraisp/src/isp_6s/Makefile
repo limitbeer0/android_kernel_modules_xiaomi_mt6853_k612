@@ -11,6 +11,7 @@
 # GNU General Public License for more details.
 #
 
+ccflags-y += -I$(DEVICE_MODULES_PATH)/include/soc/mediatek
 ccflags-y += -I$(DEVICE_MODULES_PATH)/drivers/misc/mediatek/mmp/
 ccflags-y += -I$(DEVICE_MODULES_PATH)/drivers/staging/android/ion/
 ccflags-y += -I$(DEVICE_MODULES_PATH)/drivers/misc/mediatek/cam_timesync/
@@ -24,3 +25,7 @@ ccflags-y += -I$(DEVICE_MODULES_PATH)/drivers/misc/mediatek/cameraisp/src/isp_6s
 
 # obj-$(CONFIG_MTK_CAMERA_ISP_RAW_SUPPORT) += camera_isp.o
 # obj-$(CONFIG_MTK_CAMERA_ISP_RAW_SUPPORT) += cam_qos.o
+
+ifeq ($(CONFIG_CANNON_BRINGUP),y)
+obj-$(CONFIG_MTK_CAMERA_ISP_RAW_SUPPORT) += camera_isp.o cam_qos.o
+endif
