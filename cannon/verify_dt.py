@@ -74,6 +74,12 @@ def main():
             if (get(merged, "s", seninf, "mediatek,platform") != "mt6853" or
                     get(merged, "s", seninf, "mediatek,seninf_max_num") != "6"):
                 raise SystemExit("Cannon requires the MT6853 six-port SENINF layout")
+            clock_names = get(merged, "s", seninf, "clock-names").split()
+            clocks = get(merged, "x", seninf, "clocks").split()
+            top = get(merged, "x", "/syson@10000000", "phandle")
+            if (len(clock_names) != 19 or clock_names[-1] != "cannon-isp" or
+                    len(clocks) != 38 or clocks[-2:] != [top, "a3"]):
+                raise SystemExit("SENINF fixed ISP clock lost after signed overlay")
             spm_phandle = get(merged, "x", "/power-controller@10006000", "phandle")
             if get(merged, "x", seninf, "power-domains") != spm_phandle + " f":
                 raise SystemExit("SENINF must use the native CAM power domain")
@@ -86,6 +92,26 @@ def main():
                 if (get(merged, "s", node, "compatible") != compatible or
                         get(merged, "x", node, "power-domains") != spm_phandle + " " + domain):
                     raise SystemExit("Camera clock provider/domain changed after signed overlay")
+        if get(merged, "x", "/m4u@14016000", "mediatek,larbs") != "81 84 92 93 94 95":
+            raise SystemExit("Camera LARBs missing from native IOMMU after stock overlay")
+        for node, domain in (("/smi_larb13@1a001000", "f"),
+                             ("/smi_larb14@1a002000", "f"),
+                             ("/smi_larb16@1a00f000", "10"),
+                             ("/smi_larb17@1a010000", "11")):
+            if (get(merged, "s", node, "clock-names") != "apb smi gals0 gals1" or
+                    get(merged, "x", node, "power-domains") !=
+                    get(merged, "x", "/power-controller@10006000", "phandle") + " " + domain):
+                raise SystemExit("Camera SMI clock/domain binding lost after stock overlay")
+        m4u = get(merged, "x", "/m4u@14016000", "phandle")
+        for larb, count in ((13, 9), (16, 17), (17, 17)):
+            node = "/cannon-camera-dma-larb" + str(larb)
+            if get(merged, "s", node, "compatible") != "xiaomi,cannon-camera-dma":
+                raise SystemExit("Unexpected camera DMA mapper compatible")
+            expected = []
+            for port in range(count):
+                expected += [m4u, format(0x20000 | (larb << 5) | port, "x")]
+            if get(merged, "x", node, "iommus").split() != expected:
+                raise SystemExit("Camera DMA IOMMU ports changed after signed overlay")
         fingerprint_properties = subprocess.check_output(
             ["fdtget", "-p", str(merged), "/fingerprint"], text=True).splitlines()
         if "fpc,spi" in fingerprint_properties:

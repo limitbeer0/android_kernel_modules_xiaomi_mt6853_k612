@@ -53,6 +53,14 @@ void _start(void)
 		say("4.14 compat quirk: heap query ENOTTY\n");
 	else if (queried<0 || q.count<3)
 		fail("query");
+	/* Original compat union retains eight-byte alignment due to u64. */
+	u32 client_name[16];
+	for (u32 i=0; i<16; i++) client_name[i]=0;
+	client_name[0]=4; /* ION_SYS_SET_CLIENT_NAME */
+	((char *)client_name)[8]='3';
+	((char *)client_name)[9]='2';
+	struct { u32 cmd, arg; } custom={0,(u32)client_name};
+	if (ioctl(ion,0xc0084906,&custom)<0) fail("set client name");
 	for (u32 heap=0; heap<3; heap++) {
 		for (u32 cached=0; cached<2; cached++) {
 			struct allocation a={8192,4096,masks[heap],cached,0};
@@ -70,6 +78,35 @@ void _start(void)
 			p[0]=0x6a; p[8191]=0xc5;
 			imported.handle=0; imported.fd=share.fd;
 			if (ioctl(other, 0xc0084905, &imported)<0) fail("import");
+			if (heap) {
+				u32 metadata[20];
+				for (u32 i=0; i<20; i++) metadata[i]=0;
+				metadata[0]=1; /* ION_MM_SET_DEBUG_INFO */
+				metadata[2]=a.handle;
+				((char *)metadata)[12]='3';
+				((char *)metadata)[13]='2';
+				metadata[15]=0x12345678;
+				metadata[16]=0xabcdef01;
+				metadata[17]=0xdeadbeef;
+				metadata[18]=0xffffffff;
+				custom.cmd=1; custom.arg=(u32)metadata;
+				if (ioctl(ion,0xc0084906,&custom)<0) fail("set debug metadata");
+				metadata[0]=2; /* ION_MM_GET_DEBUG_INFO */
+				metadata[2]=imported.handle;
+				for (u32 i=3; i<20; i++) metadata[i]=0;
+				if (ioctl(other,0xc0084906,&custom)<0) fail("get imported metadata");
+				if (((char *)metadata)[12]!='3' || ((char *)metadata)[13]!='2' ||
+				    metadata[15]!=0x12345678 || metadata[16]!=0xabcdef01 ||
+				    metadata[17]!=0xdeadbeef || metadata[18]!=0xffffffff)
+					fail("compat metadata layout/values");
+				u32 iova[16];
+				for (u32 i=0; i<16; i++) iova[i]=0;
+				iova[0]=8; iova[2]=imported.handle; iova[3]=16U<<5;
+				custom.arg=(u32)iova;
+				if (ioctl(other,0xc0084906,&custom)<0) fail("compat CAM GET_IOVA");
+				if (iova[9]!=2 || iova[10]!=8192)
+					fail("compat IOVA output address/length layout");
+			}
 			handle=a.handle;
 			if (ioctl(ion,0xc0044901,&handle)<0) fail("free original");
 			handle=imported.handle;
@@ -81,7 +118,7 @@ void _start(void)
 		}
 	}
 	call(6,ion,0,0,0,0,0); call(6,other,0,0,0,0,0);
-	say("PASS ARM32: 3 heaps x cached/uncached, alloc/share/import/mmap2/free/lifetime\n");
+	say("PASS ARM32: 3 heaps x cached/uncached, alloc/share/import/mmap2/free/lifetime + custom metadata/CAM IOVA\n");
 	call(1,0,0,0,0,0,0);
 	__builtin_unreachable();
 }

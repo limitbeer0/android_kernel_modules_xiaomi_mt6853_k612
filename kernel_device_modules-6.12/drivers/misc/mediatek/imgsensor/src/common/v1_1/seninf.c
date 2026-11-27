@@ -46,6 +46,49 @@ do {	\
 
 static struct SENINF gseninf;
 
+#if IS_ENABLED(CONFIG_CANNON_BRINGUP)
+static struct clk *cannon_isp_clk;
+
+/*
+ * Cannon currently retains LK's clock and voltage configuration. Advertise
+ * the actual selected CAM clock, not OPPs without a working voltage governor.
+ * The old PM_QOS_CAM_FREQ request is a minimum: a fixed clock already meets
+ * votes below its current rate. Requests above it must fail.
+ */
+static int cannon_seninf_fixed_dfs(unsigned int cmd, void *data)
+{
+	unsigned long rate;
+	u32 request;
+
+	if (IS_ERR_OR_NULL(cannon_isp_clk))
+		return -ENODEV;
+	rate = clk_get_rate(cannon_isp_clk);
+	if (rate < 1000000)
+		return -EIO;
+
+	switch (cmd) {
+	case KDSENINFIOC_GET_SUPPORTED_ISP_CLOCKS: {
+		struct IMAGESENSOR_GET_SUPPORTED_ISP_CLK *clocks = data;
+
+		memset(clocks, 0, sizeof(*clocks));
+		clocks->clklevelcnt = 1;
+		clocks->clklevel[0] = rate / 1000000;
+		return 0;
+	}
+	case KDSENINFIOC_GET_CUR_ISP_CLOCK:
+		*(u32 *)data = rate / 1000000;
+		return 0;
+	case KDSENINFIOC_DFS_UPDATE:
+		request = *(u32 *)data;
+		if (!request || request == (u32)-1)
+			return 0;
+		return (u64)request * 1000000 <= rate ? 0 : -ERANGE;
+	default:
+		return -EINVAL;
+	}
+}
+#endif
+
 
 unsigned int Switch_Tg_For_Stagger(unsigned int camtg)
 {
@@ -365,6 +408,13 @@ static long seninf_ioctl(struct file *pfile,
 			*(unsigned int *)pbuff);
 #endif
 		break;
+#if IS_ENABLED(CONFIG_CANNON_BRINGUP)
+	case KDSENINFIOC_DFS_UPDATE:
+	case KDSENINFIOC_GET_SUPPORTED_ISP_CLOCKS:
+	case KDSENINFIOC_GET_CUR_ISP_CLOCK:
+		ret = cannon_seninf_fixed_dfs(cmd, pbuff);
+		break;
+#endif
 #ifdef DFS_CTRL_BY_OPP
 	case KDSENINFIOC_DFS_UPDATE:
 		ret = seninf_dfs_ctrl(&gseninf.dfs_ctx, DFS_UPDATE, pbuff);
@@ -590,6 +640,18 @@ static MINT32 seninf_probe(struct platform_device *pDev)
 	MINT32 ret = 0;
 	MUINT32 irq_info[3];	/* Record interrupts info from device tree */
 	int irq;
+
+#if IS_ENABLED(CONFIG_CANNON_BRINGUP)
+	cannon_isp_clk = devm_clk_get(&pDev->dev, "cannon-isp");
+	if (IS_ERR(cannon_isp_clk))
+		return dev_err_probe(&pDev->dev, PTR_ERR(cannon_isp_clk),
+				     "Cannon CAM clock is not available\n");
+	if (clk_get_rate(cannon_isp_clk) < 1000000)
+		return dev_err_probe(&pDev->dev, -EIO,
+				     "Cannon CAM clock has no valid rate\n");
+	dev_info(&pDev->dev, "cannon: fixed ISP clock %lu Hz\n",
+		 clk_get_rate(cannon_isp_clk));
+#endif
 
 	ret = seninf_reg_char_dev(pseninf);
 	if (ret)
