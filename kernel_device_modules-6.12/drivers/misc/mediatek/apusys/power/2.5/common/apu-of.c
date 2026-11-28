@@ -274,45 +274,37 @@ out:
  * - -EINVAL if the supplier link is invalid and should not be created
  * - -ENODEV if there is no device that corresponds to the supplier phandle
  */
-int of_apu_link(struct device *dev, struct device_node *con_np, struct device_node *sup_np,
-			      u32 dl_flags)
+int of_apu_link(struct device *dev, struct device_node *con_np,
+		struct device_node *sup_np, u32 dl_flags)
 {
-	struct device *sup_dev, *con_dev;
-	int ret = 0;
-	struct platform_device *pdev;
+	struct platform_device *con, *sup;
+	struct device_link *link;
+	int ret = -EPROBE_DEFER;
 
-	if (!sup_np || !con_np) {
-		dev_info(dev, "Not linking %pOFP - %pOFP\n", con_np, sup_np);
-		return 0;
-	}
-
-	/*
-	 * Don't allow linking a device node as a consumer of one of its
-	 * descendant nodes. By definition, a child node can't be a functional
-	 * dependency for the parent node.
-	 */
-	if (_apu_is_ancestor_of(con_np, sup_np)) {
-		aprobe_err(dev, "%pOFP is ancestor of %pOFP\n", con_np, sup_np);
+	if (!sup_np || !con_np)
 		return -EINVAL;
-	}
-
-	pdev = of_find_device_by_node(con_np);
-	con_dev = &pdev->dev;
-	pdev = of_find_device_by_node(sup_np);
-	sup_dev = &pdev->dev;
-	if (sup_dev && of_node_check_flag(sup_np, OF_POPULATED) &&
-		con_dev && of_node_check_flag(con_np, OF_POPULATED)) {
-
-		get_device(sup_dev);
-		get_device(con_dev);
-		if (!device_link_add(con_dev, sup_dev, dl_flags)) {
-			aprobe_err(dev, "Not linking %pOFP - %pOFP\n", con_np, sup_np);
-			ret = -EINVAL;
-		}
-		put_device(sup_dev);
-		put_device(con_dev);
-	} else {
-		ret = -EPROBE_DEFER;
-	}
-	return ret;
+	if (_apu_is_ancestor_of(con_np, sup_np))
+		return -EINVAL;
+	con = of_find_device_by_node(con_np);
+	sup = of_find_device_by_node(sup_np);
+	if (!con || !sup)
+		goto put;
+	if (!of_node_check_flag(sup_np, OF_POPULATED) ||
+	    !of_node_check_flag(con_np, OF_POPULATED))
+		goto put;
+#if IS_ENABLED(CONFIG_CANNON_BRINGUP)
+	dl_flags &= ~DL_FLAG_STATELESS;
+	dl_flags |= DL_FLAG_AUTOREMOVE_CONSUMER;
+#endif
+	link = device_link_add(&con->dev, &sup->dev, dl_flags);
+	ret = link ? 0 : -EINVAL;
+put:
+	if (con)
+		put_device(&con->dev);
+	if (sup)
+		put_device(&sup->dev);
+	if (ret)
+		return dev_err_probe(dev, ret, "APU link %pOF -> %pOF unavailable\n",
+			con_np, sup_np);
+	return 0;
 }

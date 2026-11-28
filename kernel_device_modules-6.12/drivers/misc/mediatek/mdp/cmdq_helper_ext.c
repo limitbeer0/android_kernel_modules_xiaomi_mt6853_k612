@@ -269,19 +269,39 @@ bool cmdq_core_check_user_valid(void *src, u32 size)
 	return ret;
 }
 
-static void cmdq_core_init_thread_work_queue(void)
+static int cmdq_core_init_thread_work_queue(void)
 {
 	int index;
 	const u32 max_thread_count = cmdq_dev_get_thread_count();
 
 	cmdq_ctx.taskThreadAutoReleaseWQ = kcalloc(max_thread_count,
 		sizeof(*cmdq_ctx.taskThreadAutoReleaseWQ), GFP_KERNEL);
-
-	/* Initialize work queue per thread */
+	if (!cmdq_ctx.taskThreadAutoReleaseWQ)
+		return -ENOMEM;
 	for (index = 0; index < max_thread_count; index++) {
 		cmdq_ctx.taskThreadAutoReleaseWQ[index] =
-		    create_singlethread_workqueue("cmdq_auto_release_thread");
+			create_singlethread_workqueue("cmdq_auto_release_thread");
+		if (!cmdq_ctx.taskThreadAutoReleaseWQ[index])
+			goto fail;
 	}
+	return 0;
+fail:
+	while (index)
+		destroy_workqueue(cmdq_ctx.taskThreadAutoReleaseWQ[--index]);
+	kfree(cmdq_ctx.taskThreadAutoReleaseWQ);
+	cmdq_ctx.taskThreadAutoReleaseWQ = NULL;
+	return -ENOMEM;
+}
+
+void cmdq_core_flush_thread_work_queues(void)
+{
+	u32 i, count = cmdq_dev_get_thread_count();
+
+	if (!cmdq_ctx.taskThreadAutoReleaseWQ)
+		return;
+	for (i = 0; i < count; i++)
+		if (cmdq_ctx.taskThreadAutoReleaseWQ[i])
+			flush_workqueue(cmdq_ctx.taskThreadAutoReleaseWQ[i]);
 }
 
 static void cmdq_core_destroy_thread_work_queue(void)
@@ -3701,6 +3721,7 @@ s32 cmdq_core_resume(void)
 s32 cmdq_core_remove(void)
 {
 	wakeup_source_unregister(mdp_wake_lock);
+	mdp_wake_lock = NULL;
 	return 0;
 }
 
@@ -4663,12 +4684,26 @@ struct device *cmdq_mbox_dev_get(void)
 	return NULL;
 }
 
+static void cannon_mdp_mbox_unregister(void)
+{
+	u32 i;
+
+	for (i = 0; i < ARRAY_SIZE(cmdq_clients); i++) {
+		if (cmdq_clients[i])
+			cmdq_mbox_destroy(cmdq_clients[i]);
+		cmdq_clients[i] = NULL;
+	}
+	cmdq_entry = NULL;
+	mbox_dev = NULL;
+}
+
 s32 cmdq_helper_mbox_register(struct device *dev)
 {
 	u32 i;
 	s32 chan_id = CMDQ_INVALID_THREAD;
 	struct cmdq_client *clt;
 	int thread_cnt;
+	int __maybe_unused ret = -ENODEV;
 
 	thread_cnt = of_count_phandle_with_args(
 		dev->of_node, "mboxes", "#mbox-cells");
@@ -4681,6 +4716,10 @@ s32 cmdq_helper_mbox_register(struct device *dev)
 		clt = cmdq_mbox_create(dev, i);
 		if (!clt || IS_ERR(clt)) {
 			CMDQ_MSG("register mbox stop:0x%p idx:%u\n", clt, i);
+#if IS_ENABLED(CONFIG_CANNON_BRINGUP)
+			ret = IS_ERR(clt) ? PTR_ERR(clt) : -ENODEV;
+			goto fail;
+#endif
 			continue;
 		}
 		chan_id = cmdq_mbox_chan_id(clt->chan);
@@ -4688,6 +4727,10 @@ s32 cmdq_helper_mbox_register(struct device *dev)
 		if (chan_id < 0 || cmdq_clients[chan_id]) {
 			CMDQ_ERR("channel and client duplicate:%d\n", chan_id);
 			cmdq_mbox_destroy(clt);
+#if IS_ENABLED(CONFIG_CANNON_BRINGUP)
+			ret = -EBUSY;
+			goto fail;
+#endif
 			continue;
 		}
 
@@ -4710,6 +4753,12 @@ s32 cmdq_helper_mbox_register(struct device *dev)
 	}
 
 	cmdq_client_base = cmdq_register_device(dev);
+#if IS_ENABLED(CONFIG_CANNON_BRINGUP)
+	if (IS_ERR_OR_NULL(cmdq_client_base)) {
+		ret = cmdq_client_base ? PTR_ERR(cmdq_client_base) : -ENOMEM;
+		goto fail;
+	}
+#endif
 
 
 	/* for mm like mdp set large pool count */
@@ -4721,6 +4770,17 @@ s32 cmdq_helper_mbox_register(struct device *dev)
 	}
 
 	return 0;
+#if IS_ENABLED(CONFIG_CANNON_BRINGUP)
+fail:
+	for (i = 0; i < ARRAY_SIZE(cmdq_clients); i++) {
+		if (cmdq_clients[i])
+			cmdq_mbox_destroy(cmdq_clients[i]);
+		cmdq_clients[i] = NULL;
+	}
+	cmdq_entry = NULL;
+	mbox_dev = NULL;
+	return ret;
+#endif
 }
 
 struct cmdq_client *cmdq_helper_mbox_client(u32 idx)
@@ -4746,7 +4806,7 @@ void cmdq_helper_mbox_clear_pools(void)
 	}
 }
 
-void cmdq_core_initialize(void)
+int cmdq_core_initialize(void)
 {
 	const u32 max_thread_count = cmdq_dev_get_thread_count();
 	u32 index;
@@ -4754,8 +4814,11 @@ void cmdq_core_initialize(void)
 	char long_msg[CMDQ_LONGSTRING_MAX];
 	u32 msg_offset;
 	s32 msg_max_size;
+	int ret;
 
-	cmdq_helper_mbox_register(cmdq_dev_get());
+	ret = cmdq_helper_mbox_register(cmdq_dev_get());
+	if (ret)
+		return ret;
 
 	atomic_set(&cmdq_thread_usage, 0);
 
@@ -4764,6 +4827,14 @@ void cmdq_core_initialize(void)
 
 	cmdq_wait_queue = kcalloc(max_thread_count, sizeof(*cmdq_wait_queue),
 		GFP_KERNEL);
+	if (!cmdq_group_cb || !cmdq_wait_queue) {
+		kfree(cmdq_group_cb);
+		cmdq_group_cb = NULL;
+		kfree(cmdq_wait_queue);
+		cmdq_wait_queue = NULL;
+		cannon_mdp_mbox_unregister();
+		return -ENOMEM;
+	}
 	for (index = 0; index < max_thread_count; index++)
 		init_waitqueue_head(&cmdq_wait_queue[index]);
 
@@ -4807,7 +4878,9 @@ void cmdq_core_initialize(void)
 	INIT_LIST_HEAD(&cmdq_ctx.writeAddrList);
 
 	/* Initialize work queue */
-	cmdq_core_init_thread_work_queue();
+	ret = cmdq_core_init_thread_work_queue();
+	if (ret)
+		goto free_context;
 
 	/* Initialize command buffer dump */
 	memset(&cmdq_command_dump, 0x0, sizeof(cmdq_command_dump));
@@ -4825,12 +4898,30 @@ void cmdq_core_initialize(void)
 		CMDQ_ERR("%s mbox device is not exist!!!\n", __func__);
 
 	mdp_rb_pool = cmdq_alloc_user_pool("mdp_rb", cmdq_mbox_dev_get());
-	if (unlikely(!mdp_rb_pool))
-		CMDQ_ERR("%s mdp_rb_pool is not exist!!!\n", __func__);
+	if (!mdp_rb_pool) {
+		ret = -ENOMEM;
+		goto destroy_queues;
+	}
 
 	atomic_set(&mdp_rb_pool_cnt, 0);
 
 	mdp_wake_lock = wakeup_source_register(cmdq_dev_get(), "mdp_pm_lock");
+	if (!mdp_wake_lock) {
+		dma_pool_destroy(mdp_rb_pool);
+		mdp_rb_pool = NULL;
+		ret = -ENOMEM;
+		goto destroy_queues;
+	}
+	return 0;
+destroy_queues:
+	cmdq_core_destroy_thread_work_queue();
+free_context:
+	kfree(cmdq_group_cb);
+	cmdq_group_cb = NULL;
+	kfree(cmdq_wait_queue);
+	cmdq_wait_queue = NULL;
+	cannon_mdp_mbox_unregister();
+	return ret;
 }
 
 #ifdef CMDQ_DAPC_DEBUG
@@ -4860,6 +4951,17 @@ void cmdq_core_deinitialize(void)
 	kfree(cmdq_ctx.inst_check_buffer);
 	cmdq_ctx.inst_check_buffer = NULL;
 	cmdq_helper_mbox_clear_pools();
+#if IS_ENABLED(CONFIG_CANNON_BRINGUP)
+	if (mdp_wake_lock) {
+		wakeup_source_unregister(mdp_wake_lock);
+		mdp_wake_lock = NULL;
+	}
+	if (mdp_rb_pool) {
+		dma_pool_destroy(mdp_rb_pool);
+		mdp_rb_pool = NULL;
+	}
+	cannon_mdp_mbox_unregister();
+#endif
 }
 
 unsigned long cmdq_get_tracing_mark(void)

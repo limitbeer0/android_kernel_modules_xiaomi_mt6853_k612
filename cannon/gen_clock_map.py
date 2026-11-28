@@ -17,6 +17,10 @@ ALIASES = {
     "CLK_IFRAO_PERU_BUS_DCM_66M": "CLK_IFRAO_PERI_BUS_DCM_66M",
 }
 
+# Private additions start after the complete stock TOP namespace (0..235).
+# Both factors already exist in 6.12; NPU mux parents require these exact clocks.
+TOP_ADDITIONS = ("CLK_TOP_DSP1_SEL_CK", "CLK_TOP_DSP2_SEL_CK")
+
 def defines(p):
     return {k: int(v) for k, v in re.findall(r"#define\s+(CLK_\w+)\s+(\d+)", p.read_text())}
 
@@ -28,14 +32,20 @@ def generate():
            " * Keep 6.12 internal IDs unchanged, including its registration paths.",
            " */", ""]
     for prefix, name in (("CLK_TOP_", "top"), ("CLK_IFRAO_", "infra")):
-        out.append(f"static const u16 cannon_{name}_ids[{old[prefix + 'NR_CLK']}] = {{")
+        count = old[prefix + "NR_CLK"]
+        additions = TOP_ADDITIONS if name == "top" else ()
+        out.append(f"static const u16 cannon_{name}_ids[{count + len(additions)}] = {{")
         for key, value in old.items():
             if not key.startswith(prefix) or key.endswith("NR_CLK"):
                 continue
             target = ALIASES.get(key, key)
             if target in new:
                 out.append(f"\t[{value}] = {target} + 1, /* {key} */")
+        for offset, target in enumerate(additions):
+            assert target in new and target not in old
+            out.append(f"\t[{count + offset}] = {target} + 1, /* Cannon native APU parent */")
         out += ["};", ""]
+    assert old["CLK_TOP_NR_CLK"] == 236
     # These are the four critical consumers checked against the source headers.
     assert old["CLK_TOP_PWRAP_ULPOSC_SEL"] == 185
     assert new["CLK_TOP_PWRAP_ULPOSC_SEL"] == 211

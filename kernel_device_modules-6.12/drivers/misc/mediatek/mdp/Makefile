@@ -377,3 +377,11 @@ endif # !CONFIG_MTK_GMO_RAM_OPTIMIZE
 
 # xaga: platform module wiring
 obj-m += cmdq_helper_inf.o
+
+# Cannon uses the baseline's native MT6853 MDP implementation.
+ifeq ($(CONFIG_CANNON_BRINGUP),y)
+obj-$(CONFIG_MTK_MDP_MT6853) += mdp_drv_mt6853.o
+mdp_drv_mt6853-objs := mdp_mt6853.o mdp_driver.o mdp_ioctl_ex.o mdp_common.o \
+	cmdq_record.o cmdq_virtual.o cmdq_device.o mdp_event_common.o \
+	cmdq_subsys_common.o cmdq_helper_ext.o cmdq_mmp.o mdp_fence.o mdp_dpc.o
+endif

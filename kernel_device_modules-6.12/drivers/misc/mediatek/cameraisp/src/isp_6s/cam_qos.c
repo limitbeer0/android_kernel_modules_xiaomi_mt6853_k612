@@ -19,6 +19,7 @@
 #include <linux/of_platform.h>
 #include <linux/pm_opp.h>
 #include <linux/regulator/consumer.h>
+#include <linux/clk.h>
 
 #include "mtk-interconnect.h"
 #include "inc/cam_qos.h"
@@ -82,6 +83,34 @@ struct pm_qos_request isp_qos;
 
 static struct device *mmdvfsDev;
 static struct regulator *mmdvfsRegulator;
+#if IS_ENABLED(CONFIG_CANNON_BRINGUP)
+static struct clk *cannon_cam_clk;
+static bool cannon_qos_ready;
+
+bool cannon_cam_qos_ready(void)
+{
+	return READ_ONCE(cannon_qos_ready);
+}
+EXPORT_SYMBOL_GPL(cannon_cam_qos_ready);
+
+static void cannon_qos_put_paths(void)
+{
+	int i, j;
+
+	for (i = 0; i < ARRAY_SIZE(gCAM_BW_REQ); i++)
+		for (j = 0; j < _cam_max_; j++) {
+			if (!IS_ERR_OR_NULL(gCAM_BW_REQ[i][j]))
+				mtk_icc_put(gCAM_BW_REQ[i][j]);
+			gCAM_BW_REQ[i][j] = NULL;
+		}
+	for (i = 0; i < ARRAY_SIZE(gSV_BW_REQ); i++)
+		for (j = 0; j < _camsv_max_; j++) {
+			if (!IS_ERR_OR_NULL(gSV_BW_REQ[i][j]))
+				mtk_icc_put(gSV_BW_REQ[i][j]);
+			gSV_BW_REQ[i][j] = NULL;
+		}
+}
+#endif
 #else
 #ifndef EP_STAGE
 	struct mmdvfs_pm_qos_request isp_qos;
@@ -814,6 +843,9 @@ void mtk_pmqos_clr(enum ISP_IRQ_TYPE_ENUM module)
 
 unsigned int mtk_dfs_get_cur_freq(void)
 {
+#if IS_ENABLED(CONFIG_CANNON_BRINGUP)
+	return clk_get_rate(cannon_cam_clk);
+#endif
 	/* dev_pm_opp_find_freq_ceil_by_volt is not supported since kernel-6.1.
 	 * So, phase-out this function.
 	 */
@@ -829,18 +861,20 @@ unsigned int mtk_dfs_get_cur_freq(void)
 		LOG_NOTICE("Error: E_CLK_UPDATE fail\n"); \
 } while (0)
 
-#define mtk_dfs_update(clk)	do { \
-	struct dev_pm_opp *opp; \
-	int volt = 0, ret = 0; \
-	opp = dev_pm_opp_find_freq_ceil(mmdvfsDev, &clk); \
-	if (IS_ERR(opp)) \
-		opp = dev_pm_opp_find_freq_floor(mmdvfsDev, &clk); \
-	volt = dev_pm_opp_get_voltage(opp); \
-	dev_pm_opp_put(opp); \
-	ret = regulator_set_voltage(mmdvfsRegulator, volt, INT_MAX);\
-	if (ret) \
-		LOG_NOTICE("Error: E_CLK_UPDATE fail\n"); \
-} while (0)
+static int mtk_dfs_set(unsigned long *freq)
+{
+	struct dev_pm_opp *opp;
+	unsigned long volt;
+
+	opp = dev_pm_opp_find_freq_ceil(mmdvfsDev, freq);
+	if (IS_ERR(opp))
+		opp = dev_pm_opp_find_freq_floor(mmdvfsDev, freq);
+	if (IS_ERR(opp))
+		return PTR_ERR(opp);
+	volt = dev_pm_opp_get_voltage(opp);
+	dev_pm_opp_put(opp);
+	return regulator_set_voltage(mmdvfsRegulator, volt, INT_MAX);
+}
 
 #define mtk_dfs_supported(frq, step)	\
 	mmdvfs_qos_get_freq_steps(PM_QOS_CAM_FREQ, frq, &step)
@@ -855,6 +889,13 @@ int ISP_SetPMQOS(
 	unsigned int *pvalue)
 {
 	int Ret = 0;
+#if IS_ENABLED(CONFIG_CANNON_BRINGUP)
+	if (!READ_ONCE(cannon_qos_ready))
+		return -EPROBE_DEFER;
+	if (cmd == E_BW_ADD || cmd == E_BW_REMOVE)
+		return 0;
+#endif
+
 
 	if (module > ISP_IRQ_TYPE_INT_CAM_C_ST) {
 		LOG_NOTICE("supported only to CAM_C\n");
@@ -913,7 +954,9 @@ int ISP_SetPMQOS(
 #endif
 
 		freq = (*(u32 *)pvalue) * 1000000; /* MHz to Hz */
-		mtk_dfs_update(freq);
+		Ret = mtk_dfs_set(&freq);
+		if (Ret)
+			return Ret;
 
 #ifndef CONFIG_ARM64
 		freq64 = freq;
@@ -1052,6 +1095,13 @@ int SV_SetPMQOS(
 	unsigned int *pvalue)
 {
 	int Ret = 0;
+#if IS_ENABLED(CONFIG_CANNON_BRINGUP)
+	if (!READ_ONCE(cannon_qos_ready))
+		return -EPROBE_DEFER;
+	if (cmd == E_BW_ADD || cmd == E_BW_REMOVE)
+		return 0;
+#endif
+
 
 	if ((module < ISP_IRQ_TYPE_INT_CAMSV_START_ST) ||
 	    (module > ISP_IRQ_TYPE_INT_CAMSV_END_ST)) {
@@ -1108,7 +1158,9 @@ int SV_SetPMQOS(
 
 		freq = (*(u32 *)pvalue) * 1000000; // MHz to Hz
 		LOG_INF("E_CLK_UPDATE %d MHz\n", *pvalue);
-		mtk_dfs_update(freq);
+		Ret = mtk_dfs_set(&freq);
+		if (Ret)
+			return Ret;
 #ifndef CONFIG_ARM64
 		freq64 = freq;
 		do_div(freq64, 1000000); // Hz to MHz
@@ -1348,22 +1400,79 @@ static void cam_qos_parse_m4u_port(struct platform_device *pdev)
 
 static int cam_qos_probe(struct platform_device *pdev)
 {
+	struct device *dev = &pdev->dev;
+	struct regulator *regulator;
 	int ret;
-	LOG_INF("CAM QOS probe.\n");
-#ifndef EP_STAGE
-	ret = dev_pm_opp_of_add_table(&pdev->dev);
-	if (ret < 0) {
-		LOG_NOTICE("fail to add opp table: %d\n", ret);
-		return ret;
-	}
-	mmdvfsDev = &pdev->dev;
-	mmdvfsRegulator = devm_regulator_get(&pdev->dev, "dvfsrc-vcore");
+#if IS_ENABLED(CONFIG_CANNON_BRINGUP)
+	int i, j;
+	struct clk *clk;
 #endif
 
-	/* parse m4u port from dts. */
+	ret = dev_pm_opp_of_add_table(dev);
+	if (ret)
+		return ret;
+	regulator = devm_regulator_get(dev, "dvfsrc-vcore");
+	if (IS_ERR(regulator)) {
+		ret = PTR_ERR(regulator);
+		goto remove_opp;
+	}
+#if IS_ENABLED(CONFIG_CANNON_BRINGUP)
+	clk = devm_clk_get(dev, "cannon-isp");
+	if (IS_ERR(clk)) {
+		ret = PTR_ERR(clk);
+		goto remove_opp;
+	}
+	/* The only OPP matches the measured LK clock and the held Vcore floor. */
+	if (clk_get_rate(clk) != 624000000 ||
+	    regulator_get_voltage(regulator) < 725000) {
+		ret = -EINVAL;
+		goto remove_opp;
+	}
+	cannon_cam_clk = clk;
+#endif
+	mmdvfsRegulator = regulator;
+	mmdvfsDev = dev;
 	cam_qos_parse_m4u_port(pdev);
-
+#if IS_ENABLED(CONFIG_CANNON_BRINGUP)
+	for (i = ISP_IRQ_TYPE_INT_CAM_A_ST; i <= ISP_IRQ_TYPE_INT_CAM_B_ST; i++)
+		for (j = 0; j < _cam_max_; j++)
+			mtk_pmqos_add(dev, i, j);
+	for (i = ISP_IRQ_TYPE_INT_CAMSV_2_ST; i <= ISP_IRQ_TYPE_INT_CAMSV_7_ST; i++)
+		mtk_pmqos_add(dev, i, _camsv_imgo_);
+	for (i = 0; i < ARRAY_SIZE(gCAM_BW_REQ); i++)
+		for (j = 0; j < _cam_max_; j++)
+			if (IS_ERR(gCAM_BW_REQ[i][j])) {
+				ret = PTR_ERR(gCAM_BW_REQ[i][j]);
+				goto put_paths;
+			}
+	for (i = 2; i < ARRAY_SIZE(gSV_BW_REQ); i++)
+		if (IS_ERR_OR_NULL(gSV_BW_REQ[i][_camsv_imgo_])) {
+			ret = gSV_BW_REQ[i][_camsv_imgo_] ?
+				PTR_ERR(gSV_BW_REQ[i][_camsv_imgo_]) : -EPROBE_DEFER;
+			goto put_paths;
+		}
+	WRITE_ONCE(cannon_qos_ready, true);
+	dev_info(dev, "Cannon CAM QoS ready: 624 MHz, 725 mV, RAW A/B + CAMSV2-7\n");
+#endif
 	return 0;
+#if IS_ENABLED(CONFIG_CANNON_BRINGUP)
+put_paths:
+	cannon_qos_put_paths();
+	mmdvfsDev = NULL;
+#endif
+remove_opp:
+	dev_pm_opp_of_remove_table(dev);
+	return dev_err_probe(dev, ret, "CAM QoS resources unavailable\n");
+}
+
+static void cam_qos_remove(struct platform_device *pdev)
+{
+#if IS_ENABLED(CONFIG_CANNON_BRINGUP)
+	WRITE_ONCE(cannon_qos_ready, false);
+	cannon_qos_put_paths();
+#endif
+	dev_pm_opp_of_remove_table(&pdev->dev);
+	mmdvfsDev = NULL;
 }
 
 static const struct of_device_id of_match_cam_qos[] = {
@@ -1373,8 +1482,10 @@ static const struct of_device_id of_match_cam_qos[] = {
 
 static struct platform_driver cam_qos_drv = {
 	.probe = cam_qos_probe,
+	.remove = cam_qos_remove,
 	.driver = {
 		.name = "cam_qos",
+		.suppress_bind_attrs = IS_ENABLED(CONFIG_CANNON_BRINGUP),
 		.of_match_table = of_match_cam_qos,
 	},
 };

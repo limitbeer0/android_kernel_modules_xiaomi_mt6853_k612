@@ -27,6 +27,9 @@ static struct cmdqMDPFuncStruct *cmdq_mdp_get_func_priv(void)
 
 static bool cmdq_core_is_valid_group_priv(u32 engGroup)
 {
+	/* The platform frontend can be modular and not yet registered. */
+	if (!cmdq_mdp_get_func_priv()->getGroupMax)
+		return false;
 	/* check range */
 	if (engGroup >= cmdq_mdp_get_func_priv()->getGroupMax())
 		return false;
@@ -44,13 +47,13 @@ EXPORT_SYMBOL(cmdq_core_should_print_msg);
 
 u32 mdp_get_group_isp(void)
 {
-	return cmdq_mdp_get_func_priv()->getGroupIsp();
+	return cmdq_mdp_get_func_priv()->getGroupIsp ? cmdq_mdp_get_func_priv()->getGroupIsp() : 0;
 }
 EXPORT_SYMBOL(mdp_get_group_isp);
 
 u32 mdp_get_group_wpe(void)
 {
-	return cmdq_mdp_get_func_priv()->getGroupWpe();
+	return cmdq_mdp_get_func_priv()->getGroupWpe ? cmdq_mdp_get_func_priv()->getGroupWpe() : 0;
 }
 EXPORT_SYMBOL(mdp_get_group_wpe);
 

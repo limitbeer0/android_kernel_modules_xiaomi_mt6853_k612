@@ -19,8 +19,10 @@
 
 /* Private */
 #define DVFSRC_OPP_BW_QUERY
+#if !IS_ENABLED(CONFIG_CANNON_BRINGUP)
 #define DVFSRC_FORCE_OPP_SUPPORT
 #define DVFSRC_DEBUG_ENHANCE
+#endif
 #define DVFSRC_PROPERTY_ENABLE
 #define CREATE_TRACE_POINTS
 #include <trace/events/mtk_qos_trace.h>
@@ -109,6 +111,7 @@ struct mtk_dvfsrc {
 	spinlock_t req_lock;
 	struct notifier_block scpsys_notifier;
 	bool dvfsrc_enable;
+	bool fixed_boot_floor;
 #ifdef DVFSRC_FORCE_OPP_SUPPORT
 	bool opp_forced;
 	bool opp_force_lock;
@@ -507,7 +510,11 @@ static const struct dvfsrc_opp *get_current_opp(struct mtk_dvfsrc *dvfsrc)
 {
 	int level;
 
+	static const struct dvfsrc_opp unknown = {};
+
 	level = dvfsrc->dvd->get_current_level(dvfsrc);
+	if (level < 0 || level >= dvfsrc->curr_opps->num_opp)
+		return &unknown; /* Unknown state must not satisfy a high-gear vote. */
 	return &dvfsrc->curr_opps->opps[level];
 }
 
@@ -688,6 +695,9 @@ static void mt6873_set_dram_hrtbw(struct mtk_dvfsrc *dvfsrc, u64 bw)
 
 static void mt6873_set_dram_level(struct mtk_dvfsrc *dvfsrc, u32 level)
 {
+	if (dvfsrc->fixed_boot_floor)
+		level = max_t(u32, level, 6);
+
 	spin_lock(&dvfsrc->req_lock);
 	dvfsrc_rmw(dvfsrc, DVFSRC_SW_REQ, level, 0x7, 12);
 	spin_unlock(&dvfsrc->req_lock);
@@ -695,6 +705,9 @@ static void mt6873_set_dram_level(struct mtk_dvfsrc *dvfsrc, u32 level)
 
 static void mt6873_set_vcore_level(struct mtk_dvfsrc *dvfsrc, u32 level)
 {
+	if (dvfsrc->fixed_boot_floor)
+		level = max_t(u32, level, 3);
+
 	spin_lock(&dvfsrc->req_lock);
 	dvfsrc_rmw(dvfsrc, DVFSRC_SW_REQ, level, 0x7, 4);
 	spin_unlock(&dvfsrc->req_lock);
@@ -1472,6 +1485,87 @@ out:
 }
 #endif	/* DVFSRC_FORCE_OPP_SUPPORT */
 
+#if IS_ENABLED(CONFIG_CANNON_BRINGUP)
+#include "cannon-dvfsrc-profile.h"
+
+static bool cannon_legacy_dvfsrc(struct device *dev)
+{
+	return of_machine_is_compatible("xiaomi,cannon") &&
+	       of_device_is_compatible(dev->of_node, "mediatek,mt6853-dvfsrc") &&
+	       of_property_read_bool(dev->of_node, "xiaomi,cannon-legacy-firmware");
+}
+
+static int cannon_dvfsrc_init(struct mtk_dvfsrc *dvfsrc)
+{
+	const struct cannon_dvfsrc_reg *profile = cannon_dvfsrc_init_configs[0];
+	struct arm_smccc_res res;
+	s32 status, type;
+	u32 request, level;
+	int i;
+
+	/* 4.14 VCOREFS protocol, distinct from the newer SIP 0x506 interface. */
+	arm_smccc_smc(0xc2000226, 5, 0, 0, 0, 0, 0, 0, &res);
+	status = (s32)res.a0;
+	arm_smccc_smc(0xc2000226, 6, 0, 0, 0, 0, 0, 0, &res);
+	type = (s32)res.a0;
+	if (status < 0 || type < 0)
+		return dev_err_probe(dvfsrc->dev, -EOPNOTSUPP,
+				     "Legacy VCOREFS firmware unavailable: status=%d type=%d\n",
+				     status, type);
+	dev_info(dvfsrc->dev,
+		 "cannon: legacy fw status=%d type=%d boot basic=%#x swreq=%#x level=%#x\n",
+		 status, type, readl(dvfsrc->regs),
+		 readl(dvfsrc->regs + 0xc), readl(dvfsrc->regs + 0xd44));
+	/* Hold OPP0 (highest stock voltage/DDR) while firmware is initialized.
+	 * Fixed LK CAM/display clocks must retain their voltage and DDR floor.
+	 * SW_REQ3 belongs to AP; preserve its unrelated fields.
+	 */
+	writel(1, dvfsrc->regs + 0xd70);
+	request = readl(dvfsrc->regs + 0xc);
+	request = (request & ~0x7070) | 0x6030;
+	writel(request, dvfsrc->regs + 0xc);
+	readl(dvfsrc->regs + 0xc);
+	arm_smccc_smc(0xc2000226, 0, 0, 0, 0, 0, 0, 0, &res);
+	if ((s32)res.a0 < 0)
+		return dev_err_probe(dvfsrc->dev, -EIO, "Legacy VCOREFS init failed\n");
+	/* SPM_FLAG_RUN_COMMON_SCENARIO, exactly as 4.14 mtk_spmfw_init(1, 1). */
+	arm_smccc_smc(0xc2000226, 1, BIT(10), 0, 0, 0, 0, 0, &res);
+	if ((s32)res.a0 < 0)
+		return dev_err_probe(dvfsrc->dev, -EIO, "Legacy VCOREFS flags failed\n");
+	writel(request, dvfsrc->regs + 0xc);
+	for (i = 0; profile[i].offset != -1; i++)
+		writel(profile[i].val, dvfsrc->regs + profile[i].offset);
+	/* MT6853's platform table uses slot0 regardless of firmware type.
+	 * The reused mt6873 description is the reverse gear ordering of the
+	 * same 21 combined Vcore/DDR states.
+	 */
+	dvfsrc->dram_type = 0;
+	dvfsrc->fixed_boot_floor = true;
+	dvfsrc->dvfsrc_enable = true;
+	if (readl_poll_timeout_atomic(dvfsrc->regs + 0xd44, level,
+				      level & BIT(0), 1, 1000))
+		return dev_err_probe(dvfsrc->dev, -ETIMEDOUT,
+				     "Highest Vcore/DDR floor not reached: level=%#x\n", level);
+	dev_info(dvfsrc->dev,
+		 "cannon: Vcore gear3 / DDR gear6 floor, swreq=%#x level=%#x target=%#x\n",
+		 readl(dvfsrc->regs + 0xc), level, readl(dvfsrc->regs + 0xd48));
+	return 0;
+}
+
+static ssize_t cannon_state_show(struct device *dev,
+				 struct device_attribute *attr, char *buf)
+{
+	struct mtk_dvfsrc *dvfsrc = dev_get_drvdata(dev);
+
+	return sysfs_emit(buf,
+		"enabled=%u swreq=%#x current=%#x target=%#x bw=%u peak_bw=%u\n",
+		dvfsrc->dvfsrc_enable, readl(dvfsrc->regs + 0xc),
+		readl(dvfsrc->regs + 0xd44), readl(dvfsrc->regs + 0xd48),
+		readl(dvfsrc->regs + 0x26c), readl(dvfsrc->regs + 0x278));
+}
+static DEVICE_ATTR_RO(cannon_state);
+#endif
+
 /* Request handler */
 void mtk_dvfsrc_send_request(const struct device *dev, u32 cmd, u64 data)
 {
@@ -1622,8 +1716,10 @@ static irqreturn_t mtk_dvfsrc_irq_handler_thread(int irq, void *data)
 	if (val & 0x2) {
 		dev_info(dvfsrc->dev, "DVFSRC Timeout Handler %d !\n", dvfsrc->irq_counter);
 		if (dvfsrc->irq_counter < 3) {
+#ifdef DVFSRC_DEBUG_ENHANCE
 			mtk_dvfsrc_dump_notify(dvfsrc, 0);
 			mtk_dvfsrc_aee_notify(dvfsrc, DVFSRC_AEE_TIMEOUT_ERROR);
+#endif
 		} else if (dvfsrc->irq_counter == 3) {
 			dvfsrc_write(dvfsrc, DVFSRC_INT_EN,
 					dvfsrc_read(dvfsrc, DVFSRC_INT_EN) & ~0x2);
@@ -1668,6 +1764,14 @@ static int mtk_dvfsrc_probe(struct platform_device *pdev)
 	spin_lock_init(&dvfsrc->force_lock);
 #endif
 
+#if IS_ENABLED(CONFIG_CANNON_BRINGUP)
+	if (cannon_legacy_dvfsrc(dvfsrc->dev)) {
+		ret = cannon_dvfsrc_init(dvfsrc);
+		if (ret)
+			return ret;
+		goto firmware_ready;
+	}
+#endif
 #ifdef DVFSRC_PROPERTY_ENABLE
 	of_property_read_u32(np, "dvfsrc-bringup", &is_bringup);
 	of_property_read_u32(np, "dvfsrc-flag", &dvfsrc_flag);
@@ -1698,6 +1802,11 @@ static int mtk_dvfsrc_probe(struct platform_device *pdev)
 		dev_info(dvfsrc->dev, "dvfs mode is disabled\n");
 #endif
 
+#if IS_ENABLED(CONFIG_CANNON_BRINGUP)
+firmware_ready:
+#endif
+	if (dvfsrc->dram_type < 0 || dvfsrc->dram_type >= dvfsrc->dvd->num_opp_desc)
+		return dev_err_probe(dvfsrc->dev, -EINVAL, "Invalid DRAM OPP table index\n");
 #ifdef DVFSRC_OPP_BW_QUERY
 	dram_type = dvfsrc->dram_type;
 #endif
@@ -1742,6 +1851,17 @@ static int mtk_dvfsrc_probe(struct platform_device *pdev)
 	}
 	dvfsrc->therm_ddr_limit = 0xFFFF;
 	dvfsrc->therm_emi_limit = 0xFFFF;
+#if IS_ENABLED(CONFIG_CANNON_BRINGUP)
+	if (cannon_legacy_dvfsrc(dvfsrc->dev)) {
+		ret = device_create_file(dvfsrc->dev, &dev_attr_cannon_state);
+		if (ret)
+			goto unregister_icc;
+		/* Firmware was already started through the legacy protocol.
+		 * No new-firmware start/devfreq child may change fixed boot clocks.
+		 */
+		return 0;
+	}
+#endif
 	dvfsrc->devfreq = platform_device_register_data(dvfsrc->dev,
 			"mtk-dvfsrc-devfreq", -1, NULL, 0);
 	if (IS_ERR(dvfsrc->devfreq)) {
@@ -2398,6 +2518,10 @@ static void mtk_dvfsrc_remove(struct platform_device *pdev)
 {
 	struct mtk_dvfsrc *dvfsrc = platform_get_drvdata(pdev);
 
+#if IS_ENABLED(CONFIG_CANNON_BRINGUP)
+	if (cannon_legacy_dvfsrc(dvfsrc->dev))
+		device_remove_file(dvfsrc->dev, &dev_attr_cannon_state);
+#endif
 	platform_device_unregister(dvfsrc->regulator);
 	platform_device_unregister(dvfsrc->icc);
 }

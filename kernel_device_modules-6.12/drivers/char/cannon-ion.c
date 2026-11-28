@@ -24,6 +24,8 @@
 #include <linux/overflow.h>
 #include <linux/slab.h>
 #include <linux/uaccess.h>
+#include <linux/mm.h>
+#include <linux/overflow.h>
 #include <uapi/linux/cannon_ion.h>
 
 struct cannon_handle {
@@ -124,7 +126,10 @@ static bool cannon_camera_port(u32 id)
 {
 	u32 larb = id >> 5, port = id & 31;
 
-	return (larb == 13 && port < 9) ||
+	return (larb == 2 && port < 4) ||
+	       (larb == 9 && port < 26) ||
+	       (larb == 11 && port >= 15 && port < 26) ||
+	       (larb == 13 && port < 9) ||
 	       ((larb == 16 || larb == 17) && port < 17);
 }
 
@@ -148,7 +153,7 @@ static int cannon_dma_probe(struct platform_device *pdev)
 		    !cannon_camera_port(fwspec->ids[i] & 0xffff) ||
 		    ((fwspec->ids[i] & 0xffff) >> 5) != larb)
 			return dev_err_probe(dev, -EINVAL, "Unexpected camera IOMMU port\n");
-	if (fwspec->num_ids != (larb == 13 ? 9 : 17))
+	if (fwspec->num_ids != (larb == 2 ? 4 : larb == 9 ? 26 : larb == 11 ? 11 : larb == 13 ? 9 : 17))
 		return dev_err_probe(dev, -EINVAL, "Incomplete camera IOMMU ports\n");
 	ret = dma_set_mask_and_coherent(dev, DMA_BIT_MASK(34));
 	if (ret)
@@ -460,7 +465,11 @@ static long allocate(struct cannon_client *client, void __user *arg, bool compat
 		pr_info_ratelimited("cannon-ion: unsupported heap mask %#x\n", mask);
 		return -EOPNOTSUPP;
 	}
-	heap = dma_heap_find(flags & 1 ? "system" : "system-uncached");
+	/* Multimedia heaps need the native partial-cache and attachment ops. */
+	if (mask & (BIT(10) | BIT(12)))
+		heap = dma_heap_find(flags & 1 ? "mtk_mm" : "mtk_mm-uncached");
+	else
+		heap = dma_heap_find(flags & 1 ? "system" : "system-uncached");
 	if (!heap)
 		return -ENODEV;
 	buffer = dma_heap_buffer_alloc(heap, PAGE_ALIGN(len), O_RDWR | O_CLOEXEC, 0);
@@ -554,6 +563,100 @@ static long query(void __user *arg)
 	return copy_to_user(arg, &data, sizeof(data)) ? -EFAULT : 0;
 }
 
+
+/* 4.14 ION_SYS_CACHE_SYNC: use the exporter's actual whole/partial DMA-BUF
+ * cache operations. User VA is checked against this DMA-BUF's VMA and is
+ * never dereferenced. Physical-mode requests must belong to our real IOVA.
+ */
+static long custom_cache_sync(struct cannon_client *client, void __user *payload,
+			      bool compat)
+{
+	struct cannon_handle *handle;
+	struct cannon_debug *entry;
+	struct vm_area_struct *vma;
+	u8 __user *input = (u8 __user *)payload + 8;
+	u64 va = 0, iova = 0, offset = 0, length;
+	u32 size, type, narrow_va;
+	s32 id;
+	bool whole;
+	int ret;
+
+	if (get_user(id, (s32 __user *)input) ||
+	    get_user(size, (u32 __user *)(input + (compat ? 8 : 16))) ||
+	    get_user(type, (u32 __user *)(input + (compat ? 12 : 20))))
+		return -EFAULT;
+	if (type > 5)
+		return -EOPNOTSUPP;
+	handle = idr_find(&client->handles, id);
+	if (!handle)
+		return -EINVAL;
+	if (size > handle->buffer->size)
+		return -EINVAL;
+	if (type < 3) {
+		if (compat) {
+			if (get_user(narrow_va, (u32 __user *)(input + 4)))
+				return -EFAULT;
+			va = narrow_va;
+		} else if (copy_from_user(&va, input + 8, sizeof(va))) {
+			return -EFAULT;
+		}
+		if (va && size) {
+			if (!current->mm)
+				return -EINVAL;
+			mmap_read_lock(current->mm);
+			vma = find_vma(current->mm, va);
+			if (!vma || va < vma->vm_start ||
+			    vma->vm_file != handle->buffer->file ||
+			    size > vma->vm_end - va ||
+			    check_shl_overflow((u64)vma->vm_pgoff, PAGE_SHIFT, &offset) ||
+			    check_add_overflow(offset, va - vma->vm_start, &offset)) {
+				mmap_read_unlock(current->mm);
+				return -EINVAL;
+			}
+			mmap_read_unlock(current->mm);
+			length = size;
+		} else {
+			length = handle->buffer->size;
+		}
+	} else {
+		if (!size)
+			return -EINVAL;
+		if (copy_from_user(&iova, input + (compat ? 16 : 24), sizeof(iova)))
+			return -EFAULT;
+		mutex_lock(&cannon_debug_lock);
+		entry = cannon_debug_find(handle->buffer);
+		if (!entry || !entry->table || iova < entry->iova) {
+			mutex_unlock(&cannon_debug_lock);
+			return -EINVAL;
+		}
+		offset = iova - entry->iova;
+		mutex_unlock(&cannon_debug_lock);
+		length = size;
+	}
+	if (offset > handle->buffer->size || length > handle->buffer->size - offset)
+		return -EINVAL;
+	whole = !offset && length == handle->buffer->size;
+	if (!whole && (offset > UINT_MAX || length > UINT_MAX ||
+	    !handle->buffer->ops->begin_cpu_access_partial ||
+	    !handle->buffer->ops->end_cpu_access_partial))
+		return -EOPNOTSUPP;
+	type %= 3; /* CLEAN, INVALIDATE, FLUSH, with identical VA/IOVA semantics. */
+	if (type != 1) {
+		ret = whole ?
+			dma_buf_end_cpu_access(handle->buffer, DMA_TO_DEVICE) :
+			dma_buf_end_cpu_access_partial(handle->buffer, DMA_TO_DEVICE,
+						      offset, length);
+		if (ret)
+			return ret;
+	}
+	if (type != 0)
+		return whole ?
+			dma_buf_begin_cpu_access(handle->buffer, DMA_FROM_DEVICE) :
+			dma_buf_begin_cpu_access_partial(handle->buffer, DMA_FROM_DEVICE,
+							offset, length);
+	return 0;
+}
+
 static long custom(struct cannon_client *client, void __user *arg, bool compat)
 {
 	struct cannon_ion_custom native;
@@ -574,6 +677,8 @@ static long custom(struct cannon_client *client, void __user *arg, bool compat)
 	}
 	if (get_user(subcommand, (u32 __user *)payload))
 		return -EFAULT;
+	if (command == 0 && subcommand == 0)
+		return custom_cache_sync(client, payload, compat);
 	if (command == 0 && subcommand == 4) { /* ION_SYS_SET_CLIENT_NAME */
 		char name[CANNON_ION_NAME_LEN];
 

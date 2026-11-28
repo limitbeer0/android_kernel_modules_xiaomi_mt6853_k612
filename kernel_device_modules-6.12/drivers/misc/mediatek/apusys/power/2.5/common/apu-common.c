@@ -18,30 +18,13 @@ static LIST_HEAD(adev_list);
 
 static bool _valid_ad(struct apu_dev *ad)
 {
-	if (IS_ERR(ad) || !ad->df ||
-	    !ad->df->profile || !ad->df->profile->max_state) {
-		if (IS_ERR(ad)) {
-			apower_warn(ad->dev, "IS_ERR(ad)\n");
-			goto _dump;
-		}
-
-		if (!ad->df) {
-			apower_warn(ad->dev, "!ad->df\n");
-			goto _dump;
-		}
-
-		if (!ad->df->profile) {
-			apower_warn(ad->dev, "!ad->df->profile\n");
-			goto _dump;
-		}
-
-		if (!ad->df->profile->max_state)
-			apower_warn(ad->dev, "!ad->df->profile->max_state\n");
-
-_dump:
-		apower_warn(ad->dev, "%ps: Invalid input.\n",
-			   __builtin_return_address(0));
-
+	if (IS_ERR_OR_NULL(ad)) {
+		pr_err("apusys: device not ready at %ps\n", __builtin_return_address(0));
+		return false;
+	}
+	if (!ad->df || !ad->df->profile || !ad->df->profile->max_state) {
+		apower_warn(ad->dev, "%ps: no devfreq OPP table\n",
+			__builtin_return_address(0));
 		return false;
 	}
 	return true;

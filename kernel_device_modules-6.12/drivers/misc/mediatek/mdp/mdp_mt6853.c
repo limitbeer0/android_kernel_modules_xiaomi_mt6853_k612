@@ -1579,6 +1579,11 @@ static bool mdp_is_isp_camin(struct cmdqRecStruct *handle)
 		((1LL << CMDQ_ENG_MDP_CAMIN) | CMDQ_ENG_ISP_GROUP_BITS));
 }
 
+static void cannon_mdp_put_larb(void *data)
+{
+	put_device(data);
+}
+
 struct device *mdp_init_larb(struct platform_device *pdev, u8 idx)
 {
 	struct device_node *node;
@@ -1603,6 +1608,10 @@ struct device *mdp_init_larb(struct platform_device *pdev, u8 idx)
 
 	CMDQ_LOG("%s pdev %p idx %hhu\n", __func__, pdev, idx);
 
+#if IS_ENABLED(CONFIG_CANNON_BRINGUP)
+	if (devm_add_action_or_reset(&pdev->dev, cannon_mdp_put_larb, &larb_pdev->dev))
+		return NULL;
+#endif
 	return &larb_pdev->dev;
 }
 
@@ -1740,17 +1749,19 @@ struct device *cmdq_mdp_get_larb_device(void)
 {
 	return larb2;
 }
-static void mdp_enable_larb(bool enable, struct device *larb)
+static int mdp_enable_larb(bool enable, struct device *larb)
 {
 #if IS_ENABLED(CONFIG_DEVICE_MODULES_MTK_SMI)
 	if (!larb) {
 		CMDQ_ERR("%s smi larb not support\n", __func__);
-		return;
+		return -ENODEV;
 	}
 
 	if (enable) {
 		int ret = pm_runtime_resume_and_get(larb);
 
+		if (ret < 0)
+			return ret;
 		cmdq_mdp_enable_clock_APB(enable);
 		cmdq_mdp_enable_clock_MDP_MUTEX0(enable);
 
@@ -1768,12 +1779,13 @@ static void mdp_enable_larb(bool enable, struct device *larb)
 
 	}
 #endif
+	return 0;
 }
 
 static s32 cmdq_mdp_enable_common_clock(bool enable, u64 engine_flag)
 {
 	if (engine_flag & MDP_ENG_LARB2)
-		mdp_enable_larb(enable, larb2);
+		return mdp_enable_larb(enable, larb2);
 	return 0;
 }
 
@@ -1817,6 +1829,82 @@ u64 cmdq_mdp_get_secure_engine(u64 engine_flags)
 	CMDQ_ENGINE_TRANS(engine_flags, sec_eng_flag, WPEO2);
 
 	return sec_eng_flag;
+}
+#endif
+
+#if IS_ENABLED(CONFIG_CANNON_BRINGUP)
+static struct icc_path ** const cannon_mdp_paths[] = {
+	path_mdp_rdma0,
+	path_mdp_rdma1,
+	path_mdp_wrot0,
+	path_mdp_wrot1,
+	path_l9_img_imgi_d1,
+	path_l9_img_imgbi_d1,
+	path_l9_img_dmgi_d1,
+	path_l9_img_depi_d1,
+	path_l9_img_ice_d1,
+	path_l9_img_smti_d1,
+	path_l9_img_smto_d2,
+	path_l9_img_smto_d1,
+	path_l9_img_crzo_d1,
+	path_l9_img_img3o_d1,
+	path_l9_img_vipi_d1,
+	path_l9_img_smti_d5,
+	path_l9_img_timgo_d1,
+	path_l9_img_ufbc_w0,
+	path_l9_img_ufbc_r0,
+	path_l11_img_imgi_d1,
+	path_l11_img_imgbi_d1,
+	path_l11_img_dmgi_d1,
+	path_l11_img_depi_d1,
+	path_l11_img_ice_d1,
+	path_l11_img_smti_d1,
+	path_l11_img_smto_d2,
+	path_l11_img_smto_d1,
+	path_l11_img_crzo_d1,
+	path_l11_img_img3o_d1,
+	path_l11_img_vipi_d1,
+	path_l11_img_smti_d5,
+	path_l11_img_timgo_d1,
+	path_l11_img_ufbc_w0,
+	path_l11_img_ufbc_r0,
+	path_l11_img_wpe_rdma1,
+	path_l11_img_wpe_rdma0,
+	path_l11_img_wpe_wdma,
+	path_l11_img_mfb_rdma0,
+	path_l11_img_mfb_rdma1,
+	path_l11_img_mfb_rdma2,
+	path_l11_img_mfb_rdma3,
+	path_l11_img_mfb_rdma4,
+	path_l11_img_mfb_rdma5,
+	path_l11_img_mfb_wdma0,
+	path_l11_img_mfb_wdma1
+};
+int cannon_mdp_qos_ready(void)
+{
+	int i, thread, slot;
+
+	for (thread = 19; thread <= 22; thread++) {
+		slot = thread - MDP_THREAD_START;
+		if (slot < 0 || slot >= MDP_TOTAL_THREAD)
+			return -EINVAL;
+		for (i = 0; i < ARRAY_SIZE(cannon_mdp_paths); i++)
+			if (IS_ERR_OR_NULL(cannon_mdp_paths[i][slot]))
+				return cannon_mdp_paths[i][slot] ?
+					PTR_ERR(cannon_mdp_paths[i][slot]) : -EPROBE_DEFER;
+	}
+	return 0;
+}
+void cannon_mdp_qos_release(void)
+{
+	int i, j;
+
+	for (i = 0; i < ARRAY_SIZE(cannon_mdp_paths); i++)
+		for (j = 0; j < MDP_TOTAL_THREAD; j++) {
+			if (!IS_ERR_OR_NULL(cannon_mdp_paths[i][j]))
+				mtk_icc_put(cannon_mdp_paths[i][j]);
+			cannon_mdp_paths[i][j] = NULL;
+		}
 }
 #endif
 

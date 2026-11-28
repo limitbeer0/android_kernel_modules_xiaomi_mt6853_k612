@@ -467,3 +467,8 @@ int mdp_sync_device_init(void)
 }
 
 MODULE_LICENSE("GPL");
+
+void mdp_sync_device_deinit(void)
+{
+	misc_deregister(&mdp_sync_dev);
+}

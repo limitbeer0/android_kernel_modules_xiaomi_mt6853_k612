@@ -2,6 +2,7 @@
 ifeq ($(CONFIG_CANNON_BRINGUP),y)
 ccflags-y += -I$(DEVICE_MODULES_PATH)/drivers/misc/mediatek/include
 ccflags-y += -I$(DEVICE_MODULES_PATH)/drivers/clk/mediatek
+obj-$(CONFIG_MTK_DVFSRC) += mtk-dvfsrc.o
 obj-$(CONFIG_DEVICE_MODULES_MTK_PMIC_WRAP) += mtk-pmic-wrap.o
 obj-$(CONFIG_DEVICE_MODULES_MTK_SCPSYS) += cannon-scpsys-core.o mtk-scpsys-mt6853.o
 cannon-scpsys-core-y := mtk-scpsys.o

@@ -4,7 +4,7 @@
  * Keep 6.12 internal IDs unchanged, including its registration paths.
  */
 
-static const u16 cannon_top_ids[236] = {
+static const u16 cannon_top_ids[238] = {
 	[0] = CLK_TOP_MAINPLL + 1, /* CLK_TOP_MAINPLL */
 	[1] = CLK_TOP_MAINPLL_D3 + 1, /* CLK_TOP_MAINPLL_D3 */
 	[2] = CLK_TOP_MAINPLL_D4 + 1, /* CLK_TOP_MAINPLL_D4 */
@@ -236,6 +236,8 @@ static const u16 cannon_top_ids[236] = {
 	[233] = CLK_TOP_APLL12_CK_DIV7 + 1, /* CLK_TOP_APLL12_CK_DIV7 */
 	[234] = CLK_TOP_APLL12_CK_DIV8 + 1, /* CLK_TOP_APLL12_CK_DIV8 */
 	[235] = CLK_TOP_APLL12_CK_DIV9 + 1, /* CLK_TOP_APLL12_CK_DIV9 */
+	[236] = CLK_TOP_DSP1_SEL_CK + 1, /* Cannon native APU parent */
+	[237] = CLK_TOP_DSP2_SEL_CK + 1, /* Cannon native APU parent */
 };
 
 static const u16 cannon_infra_ids[116] = {

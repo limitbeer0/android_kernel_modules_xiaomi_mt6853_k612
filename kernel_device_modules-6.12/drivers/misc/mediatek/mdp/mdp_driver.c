@@ -38,6 +38,10 @@
 #include <linux/soc/mediatek/mtk-cmdq-ext.h>
 #include <linux/sched/clock.h>
 #include <linux/vmalloc.h>
+#include <linux/of_platform.h>
+#include <linux/clk.h>
+#include <linux/regulator/consumer.h>
+#include "mtk-interconnect.h"
 #ifdef CMDQ_USE_LEGACY
 #include <mach/mt_boot.h>
 #endif
@@ -49,7 +53,11 @@
  *  - use io_map to map and get VA of HW's rgister
  */
 static const struct of_device_id cmdq_of_ids[] = {
+	#if IS_ENABLED(CONFIG_CANNON_BRINGUP)
+	{.compatible = "xiaomi,cannon-mdp",},
+#else
 	{.compatible = "mediatek,mdp",},
+#endif
 	{}
 };
 
@@ -1139,11 +1147,117 @@ void mdp_mme_init(void)
 #endif
 }
 
+
+#if IS_ENABLED(CONFIG_CANNON_BRINGUP)
+static bool cannon_mdp_initialized;
+static bool cannon_mdp_published;
+static bool cannon_mdp_pm_registered;
+static bool cannon_mdp_fence_registered;
+static struct platform_device *cannon_mdp_master;
+
+bool cannon_mdp_frontend_ready(void)
+{
+	return READ_ONCE(cannon_mdp_published);
+}
+EXPORT_SYMBOL_GPL(cannon_mdp_frontend_ready);
+
+static int cannon_mdp_check_node(struct device_node *node, bool bound)
+{
+	struct platform_device *pdev;
+	struct clk *clk;
+	int i, count;
+
+	if (!node)
+		return -EINVAL;
+	pdev = of_find_device_by_node(node);
+	if (!pdev)
+		return -EPROBE_DEFER;
+	if (bound && !device_is_bound(&pdev->dev)) {
+		put_device(&pdev->dev);
+		return -EPROBE_DEFER;
+	}
+	put_device(&pdev->dev);
+	count = of_count_phandle_with_args(node, "clocks", "#clock-cells");
+	for (i = 0; i < count; i++) {
+		clk = of_clk_get(node, i);
+		if (IS_ERR(clk))
+			return PTR_ERR(clk);
+		clk_put(clk);
+	}
+	return 0;
+}
+
+static int cannon_mdp_preflight(struct platform_device *pdev)
+{
+	static const char * const refs[] = {
+		"mmsys-config", "mm-mutex", "mdp-rdma0", "mdp-rdma1",
+		"mdp-rsz0", "mdp-rsz1", "mdp-wrot0", "mdp-wrot1",
+		"mdp-tdshp0", "mdp-tdshp1", "mdp-aal0", "mdp-aal1",
+		"mdp-color0", "mdp-hdr0", "mediatek,larb"
+	};
+	struct device *dev = &pdev->dev;
+	struct device_node *node;
+	struct of_phandle_args args;
+	struct icc_path *path;
+	struct regulator *reg;
+	const char *name;
+	int i, count, ret;
+
+	ret = cannon_mdp_check_node(dev->of_node, false);
+	if (ret)
+		return ret;
+	for (i = 0; i < ARRAY_SIZE(refs); i++) {
+		node = of_parse_phandle(dev->of_node, refs[i], 0);
+		ret = cannon_mdp_check_node(node, i == 0 || i == ARRAY_SIZE(refs) - 1);
+		of_node_put(node);
+		if (ret)
+			return dev_err_probe(dev, ret, "MDP supplier %s unavailable\n", refs[i]);
+	}
+	count = of_count_phandle_with_args(dev->of_node, "mboxes", "#mbox-cells");
+	if (count != 4)
+		return -EINVAL;
+	for (i = 0; i < count; i++) {
+		ret = of_parse_phandle_with_args(dev->of_node, "mboxes", "#mbox-cells", i, &args);
+		if (ret)
+			return ret;
+		ret = cannon_mdp_check_node(args.np, true);
+		of_node_put(args.np);
+		if (ret)
+			return ret;
+		if (args.args_count != 3 || args.args[0] != 19 + i)
+			return -EINVAL;
+	}
+	reg = regulator_get(dev, "mdp-dvfsrc-vcore");
+	if (IS_ERR(reg))
+		return PTR_ERR(reg);
+	ret = regulator_get_voltage(reg);
+	regulator_put(reg);
+	if (ret < 725000)
+		return ret < 0 ? ret : -EINVAL;
+	count = of_property_count_strings(dev->of_node, "interconnect-names");
+	if (count < 4)
+		return -EINVAL;
+	for (i = 0; i < count; i++) {
+		of_property_read_string_index(dev->of_node, "interconnect-names", i, &name);
+		path = of_mtk_icc_get(dev, name);
+		if (IS_ERR_OR_NULL(path))
+			return path ? PTR_ERR(path) : -EPROBE_DEFER;
+		mtk_icc_put(path);
+	}
+	return 0;
+}
+#endif
+
 static int cmdq_probe(struct platform_device *pDevice)
 {
 	int status;
 	struct device *object;
 
+#if IS_ENABLED(CONFIG_CANNON_BRINGUP)
+	status = cannon_mdp_preflight(pDevice);
+	if (status)
+		return status;
+#endif
 	/* mdp mme log init */
 	mdp_mme_init();
 
@@ -1156,39 +1270,26 @@ static int cmdq_probe(struct platform_device *pDevice)
 	cmdq_dev_init(pDevice);
 
 	/* init cmdq context */
-	cmdq_core_initialize();
+	status = cmdq_core_initialize();
+	if (status) {
+		cmdq_dev_deinit();
+		return status;
+	}
+#if IS_ENABLED(CONFIG_CANNON_BRINGUP)
+	cannon_mdp_initialized = true;
+#endif
 
 	/* init cmdq context */
 	CMDQ_LOG("call cmdq_mdp_init\n");
 	cmdq_mdp_init(pDevice);
+#if IS_ENABLED(CONFIG_CANNON_BRINGUP)
+	status = cannon_mdp_common_ready();
+	if (!status)
+		status = cannon_mdp_qos_ready();
+	if (status)
+		goto cleanup_core;
+#endif
 
-	status = alloc_chrdev_region(&gMdpDevNo, 0, 1,
-		MDP_DRIVER_DEVICE_NAME);
-	if (status != 0) {
-		/* Cannot get MDP device major number */
-		CMDQ_ERR("Get MDP device major number(%d) failed(%d)\n",
-			gMdpDevNo, status);
-	} else {
-		/* Get MDP device major number successfully */
-		CMDQ_MSG("Get MDP device major number(%d) success(%d)\n",
-			gMdpDevNo, status);
-	}
-
-	/* ioctl access point (/dev/mtk_mdp) */
-	gMdpCDev = cdev_alloc();
-	gMdpCDev->owner = THIS_MODULE;
-	gMdpCDev->ops = &mdpOP;
-
-	status = cdev_add(gMdpCDev, gMdpDevNo, 1);
-
-	gMDPClass = class_create(MDP_DRIVER_DEVICE_NAME);
-	object = device_create(gMDPClass, NULL, gMdpDevNo, NULL,
-		MDP_DRIVER_DEVICE_NAME);
-	if (IS_ERR(object)) {
-		CMDQ_ERR("Failed to create device %s(%pe)\n",
-			MDP_DRIVER_DEVICE_NAME, object);
-		return PTR_ERR(object);
-	}
 
 	/* mtk-cmdq-mailbox will register the irq */
 
@@ -1209,19 +1310,79 @@ static int cmdq_probe(struct platform_device *pDevice)
 	status = register_pm_notifier(&cmdq_pm_notifier_block);
 	if (status != 0) {
 		CMDQ_ERR("Failed to register_pm_notifier(%d)\n", status);
+#if IS_ENABLED(CONFIG_CANNON_BRINGUP)
+		goto cleanup_core;
+#else
 		return -ENODEV;
+#endif
 	}
+
+
+#if IS_ENABLED(CONFIG_CANNON_BRINGUP)
+	cannon_mdp_pm_registered = true;
+#endif
+	status = alloc_chrdev_region(&gMdpDevNo, 0, 1, MDP_DRIVER_DEVICE_NAME);
+	if (status)
+		goto unregister_pm;
+	gMdpCDev = cdev_alloc();
+	if (!gMdpCDev) {
+		status = -ENOMEM;
+		goto unregister_region;
+	}
+	gMdpCDev->owner = THIS_MODULE;
+	gMdpCDev->ops = &mdpOP;
+	status = cdev_add(gMdpCDev, gMdpDevNo, 1);
+	if (status)
+		goto delete_cdev;
+	gMDPClass = class_create(MDP_DRIVER_DEVICE_NAME);
+	if (IS_ERR(gMDPClass)) {
+		status = PTR_ERR(gMDPClass);
+		goto delete_cdev;
+	}
+	object = device_create(gMDPClass, NULL, gMdpDevNo, NULL, MDP_DRIVER_DEVICE_NAME);
+	if (IS_ERR(object)) {
+		status = PTR_ERR(object);
+		class_destroy(gMDPClass);
+		goto delete_cdev;
+	}
+#if IS_ENABLED(CONFIG_CANNON_BRINGUP)
+	cannon_mdp_published = true;
+	cannon_mdp_master = pDevice;
+	dev_info(&pDevice->dev, "Cannon MDP frontend ready: normal GCE19-22, real LARB2/QoS\n");
+#endif
 
 	CMDQ_LOG("MDP driver probe end\n");
 
 	return 0;
+delete_cdev:
+	cdev_del(gMdpCDev);
+	gMdpCDev = NULL;
+unregister_region:
+	unregister_chrdev_region(gMdpDevNo, 1);
+unregister_pm:
+	unregister_pm_notifier(&cmdq_pm_notifier_block);
+#if IS_ENABLED(CONFIG_CANNON_BRINGUP)
+	cannon_mdp_pm_registered = false;
+cleanup_core:
+	cmdq_core_flush_thread_work_queues();
+	cannon_mdp_common_release(pDevice);
+	cannon_mdp_qos_release();
+	cmdq_core_remove();
+	cmdq_core_deinit_group_cb();
+	cmdq_core_deinitialize();
+	cmdq_dev_deinit();
+	cannon_mdp_initialized = false;
+#endif
+	return status;
 }
 
 
 static void cmdq_remove(struct platform_device *pDevice)
 {
 	cmdq_core_remove();
+#if !IS_ENABLED(CONFIG_CANNON_BRINGUP)
 	disable_irq(cmdq_dev_get_irq_id());
+#endif
 }
 
 
@@ -1258,6 +1419,7 @@ static struct platform_driver gCmdqDriver = {
 	.remove = cmdq_remove,
 	.driver = {
 		.name = MDP_DRIVER_DEVICE_NAME,
+		.suppress_bind_attrs = IS_ENABLED(CONFIG_CANNON_BRINGUP),
 		.owner = THIS_MODULE,
 		.pm = &cmdq_pm_ops,
 		.of_match_table = cmdq_of_ids,
@@ -1274,18 +1436,36 @@ static int __init cmdq_init(void)
 	cmdq_mdp_virtual_function_setting();
 	cmdq_mdp_platform_function_setting();
 
+#if IS_ENABLED(CONFIG_CANNON_BRINGUP)
+	mdpsyscon_init();
+	status = mdp_sync_device_init();
+	if (status) {
+		mdpsyscon_deinit();
+		return status;
+	}
+	cannon_mdp_fence_registered = true;
+#endif
 	status = platform_driver_register(&gCmdqDriver);
 	if (status != 0) {
 		CMDQ_ERR("Failed to register the CMDQ driver(%d)\n", status);
+#if IS_ENABLED(CONFIG_CANNON_BRINGUP)
+		if (cannon_mdp_fence_registered)
+			mdp_sync_device_deinit();
+		mdpsyscon_deinit();
+#endif
 		return -ENODEV;
 	}
 
+#if !IS_ENABLED(CONFIG_CANNON_BRINGUP)
 	mdpsyscon_init();
+#endif
 	cmdq_core_late_init();
+#if !IS_ENABLED(CONFIG_CANNON_BRINGUP)
 	status = mdp_sync_device_init();
 	if (status != 0)
 		CMDQ_ERR("fence init fail:%d\n", status);
 
+#endif
 	CMDQ_LOG("MDP driver init end\n");
 
 	return 0;
@@ -1297,6 +1477,16 @@ static void __exit cmdq_exit(void)
 
 	CMDQ_LOG("MDP driver exit begin\n");
 
+#if IS_ENABLED(CONFIG_CANNON_BRINGUP)
+	if (!cannon_mdp_initialized) {
+		platform_driver_unregister(&gCmdqDriver);
+		if (cannon_mdp_fence_registered)
+			mdp_sync_device_deinit();
+		mdpsyscon_deinit();
+		return;
+	}
+	if (cannon_mdp_published) {
+#endif
 	device_destroy(gMDPClass, gMdpDevNo);
 
 	class_destroy(gMDPClass);
@@ -1306,11 +1496,25 @@ static void __exit cmdq_exit(void)
 	gMdpCDev = NULL;
 
 	unregister_chrdev_region(gMdpDevNo, 1);
+#if IS_ENABLED(CONFIG_CANNON_BRINGUP)
+	}
+#endif
 
+#if IS_ENABLED(CONFIG_CANNON_BRINGUP)
+	if (cannon_mdp_pm_registered) {
+		unregister_pm_notifier(&cmdq_pm_notifier_block);
+		cannon_mdp_pm_registered = false;
+	}
+#endif
 	platform_driver_unregister(&gCmdqDriver);
 
 	/* register pm notifier */
+	#if IS_ENABLED(CONFIG_CANNON_BRINGUP)
+	status = cannon_mdp_pm_registered ?
+		unregister_pm_notifier(&cmdq_pm_notifier_block) : 0;
+#else
 	status = unregister_pm_notifier(&cmdq_pm_notifier_block);
+#endif
 	if (status != 0) {
 		/* Failed to unregister_pm_notifier */
 		CMDQ_ERR("Failed to unregister_pm_notifier(%d)\n", status);
@@ -1320,6 +1524,12 @@ static void __exit cmdq_exit(void)
 	cmdqCoreRegisterCB(cmdq_mdp_get_func()->getGroupMdp(),
 		NULL, NULL, NULL, NULL);
 
+	#if IS_ENABLED(CONFIG_CANNON_BRINGUP)
+	cmdq_core_flush_thread_work_queues();
+	if (cannon_mdp_master)
+		cannon_mdp_common_release(cannon_mdp_master);
+	cannon_mdp_qos_release();
+#endif
 	/* De-Initialize group callback */
 	cmdq_core_deinit_group_cb();
 
@@ -1329,7 +1539,14 @@ static void __exit cmdq_exit(void)
 	/* De-Initialize cmdq dev related data */
 	cmdq_dev_deinit();
 	mdpsyscon_deinit();
+#if IS_ENABLED(CONFIG_CANNON_BRINGUP)
+	if (cannon_mdp_fence_registered)
+		mdp_sync_device_deinit();
+#endif
 
+	#if IS_ENABLED(CONFIG_CANNON_BRINGUP)
+	memset(&mdp_funcs, 0, sizeof(mdp_funcs));
+#endif
 	CMDQ_LOG("MDP driver exit end\n");
 }
 

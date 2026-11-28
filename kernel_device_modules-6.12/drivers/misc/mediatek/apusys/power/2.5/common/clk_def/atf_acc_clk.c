@@ -4,7 +4,7 @@
  */
 
 #include <linux/arm-smccc.h>
-#include <linux/soc/mediatek/mtk_sip_svc.h>
+#include <mtk_sip_svc.h>
 
 static int mt6877_clk_en;
 static struct mutex mt6877_clk_lock;

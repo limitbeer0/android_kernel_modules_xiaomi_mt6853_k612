@@ -409,3 +409,13 @@ extern phys_addr_t *mdp_engine_base_get(void);
 extern u32 mdp_engine_base_count(void);
 
 #endif				/* __MDP_COMMON_H__ */
+
+#if IS_ENABLED(CONFIG_CANNON_BRINGUP)
+int cannon_mdp_qos_ready(void);
+void cannon_mdp_qos_release(void);
+#endif
+
+#if IS_ENABLED(CONFIG_CANNON_BRINGUP)
+int cannon_mdp_common_ready(void);
+void cannon_mdp_common_release(struct platform_device *pdev);
+#endif

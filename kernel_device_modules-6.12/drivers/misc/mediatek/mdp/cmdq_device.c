@@ -4,6 +4,7 @@
  */
 
 #include "cmdq_device.h"
+#include <linux/pm_runtime.h>
 #include "cmdq_virtual.h"
 #include "cmdq_helper_ext.h"
 
@@ -251,6 +252,12 @@ bool cmdq_dev_gce_clock_is_enable(void)
 
 bool cmdq_dev_mmsys_clock_is_enable(void)
 {
+#if IS_ENABLED(CONFIG_CANNON_BRINGUP)
+	struct device *larb = cmdq_mdp_get_func()->mdpGetLarbDev();
+
+	return larb && pm_runtime_active(larb);
+#endif
+
 	if (IS_ERR(gCmdqDev.clk_mmsys_mtcmos)) {
 		CMDQ_ERR("MMSYS_MTCMOS clk not support\n");
 		return false;
@@ -508,8 +515,10 @@ void cmdq_dev_init(struct platform_device *pDevice)
 		gCmdqDev.clk_gce = devm_clk_get(&pDevice->dev, "GCE");
 		gCmdqDev.clk_gce_timer = devm_clk_get(&pDevice->dev,
 			"GCE_TIMER");
+#if !IS_ENABLED(CONFIG_CANNON_BRINGUP)
 		gCmdqDev.clk_mmsys_mtcmos = devm_clk_get(&pDevice->dev,
 			"MMSYS_MTCMOS");
+#endif
 
 		CMDQ_LOG(
 			"[CMDQ] platform_dev: dev:%p PA:%pa VA:%lx irqId:%d irqSecId:%d\n",
@@ -518,6 +527,10 @@ void cmdq_dev_init(struct platform_device *pDevice)
 			gCmdqDev.irqSecId);
 
 		node2 = of_parse_phandle(node, "mediatek,mailbox-gce-m", 0);
+#if IS_ENABLED(CONFIG_CANNON_BRINGUP)
+		if (!node2)
+			node2 = of_parse_phandle(node, "mediatek,mailbox-gce", 0);
+#endif
 		if (!node2)
 			break;
 		pdevice2 = of_find_device_by_node(node2);
@@ -536,14 +549,22 @@ void cmdq_dev_init(struct platform_device *pDevice)
 		gCmdqDev.clk_gce = devm_clk_get(gCmdqDev.pDev, "GCE");
 		gCmdqDev.clk_gce_timer = devm_clk_get(gCmdqDev.pDev,
 			"GCE_TIMER");
+#if !IS_ENABLED(CONFIG_CANNON_BRINGUP)
 		gCmdqDev.clk_mmsys_mtcmos = devm_clk_get(gCmdqDev.pDev,
 			"MMSYS_MTCMOS");
+#endif
 
 		CMDQ_LOG(
 			"[CMDQ] platform_dev: dev:%p PA:%pa VA:%lx irqId:%d irqSecId:%d\n",
 			gCmdqDev.pDev, &gCmdqDev.regBasePA,
 			gCmdqDev.regBaseVA, gCmdqDev.irqId,
 			gCmdqDev.irqSecId);
+
+#if IS_ENABLED(CONFIG_CANNON_BRINGUP)
+		/* Cannon has one GCE. Do not invent a second register bank. */
+		put_device(&pdevice2->dev);
+		break;
+#endif
 
 		node2 = of_parse_phandle(node, "mediatek,mailbox-gce", 0);
 		if (!node2)

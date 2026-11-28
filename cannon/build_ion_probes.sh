@@ -22,3 +22,8 @@ mkdir -p "$OUT"
     -fuse-ld=lld -static -O2 -Wall -Wextra -Werror \
     -I"$ROOT/kernel_device_modules-6.12/include/uapi" \
     "$ROOT/cannon/ion_iova_probe.c" -o "$OUT/cannon-ion-iova-probe"
+
+"$LLVM_BIN/clang" --target=aarch64-linux-gnu --gcc-toolchain=/usr \
+    -fuse-ld=lld -static -O2 -Wall -Wextra -Werror \
+    -I"$ROOT/kernel_device_modules-6.12/include/uapi" \
+    "$ROOT/cannon/ion_cache_probe.c" -o "$OUT/cannon-ion-cache-probe"

@@ -1,0 +1,292 @@
+// SPDX-License-Identifier: GPL-2.0-only
+// Native MT6853 MDP bindings, with Cannon stock component references.
+// LK clock measurement: MDP 593999787 Hz (~594MHz), IMG1/2 624MHz.
+// Only normal GCE threads 19..22 are available; thread 23 is diagnostic.
+&{/mdp_rdma0@1f003000} {
+ compatible = "mediatek,mdp_rdma0";
+};
+/ {
+ cannon_mdp_fixed_opp: cannon-mdp-fixed-opp {
+  compatible = "operating-points-v2";
+  opp-594000000 { opp-hz = /bits/ 64 <594000000>; opp-microvolt = <725000>; };
+ };
+ cannon_mdp: cannon-mdp@1f000000 {
+   compatible = "xiaomi,cannon-mdp", "mediatek,mdp";
+   reg = <0 0x1f000000 0 0x1000>;
+   thread-count = <24>;
+  mediatek,mailbox-gce = <0x52>;
+   clocks = <0x2b 8 0x2b 24 0x3e 0x9e 0x3e 0x9f>;
+   clock-names = "GCE", "GCE_TIMER", "cannon-mdp", "cannon-img";
+   mboxes = <0x52 19 0 1>,
+    <0x52 20 0 1>,
+    <0x52 21 0 1>,
+    <0x52 22 0 1>;
+   mmsys-config = <0x53>;
+   mm-mutex = <0xa3>;
+   mdp-rdma0 = <0xa4>;
+   mdp-rdma1 = <0xa5>;
+   mdp-rsz0 = <0xa6>;
+   mdp-rsz1 = <0xa7>;
+   mdp-wrot0 = <0xa8>;
+   mdp-wrot1 = <0xa9>;
+   mdp-tdshp0 = <0xaa>;
+   mdp-tdshp1 = <0xab>;
+   mdp-aal0 = <0xac>;
+   mdp-aal1 = <0xad>;
+   mdp-color0 = <0xae>;
+   mdp-hdr0 = <0xaf>;
+   mediatek,larb = <0x8d>;
+   g3d_config_base = <0x13000000 0 0xffff0000>;
+   mmsys_config_base = <0x14000000 1 0xffff0000>;
+   disp_dither_base = <0x14010000 2 0xffff0000>;
+   mm_na_base = <0x14020000 3 0xffff0000>;
+   imgsys_base = <0x15020000 4 0xffff0000>;
+   vdec_gcon_base = <0x18800000 5 0xffff0000>;
+   venc_gcon_base = <0x18810000 6 0xffff0000>;
+   conn_peri_base = <0x18820000 7 0xffff0000>;
+   topckgen_base = <0x18830000 8 0xffff0000>;
+   kp_base = <0x18840000 9 0xffff0000>;
+   scp_sram_base = <0x10000000 10 0xffff0000>;
+   infra_na3_base = <0x10010000 11 0xffff0000>;
+   infra_na4_base = <0x10020000 12 0xffff0000>;
+   scp_base = <0x10030000 13 0xffff0000>;
+   mcucfg_base = <0x10040000 14 0xffff0000>;
+   gcpu_base = <0x10050000 15 0xffff0000>;
+   usb0_base = <0x10200000 16 0xffff0000>;
+   usb_sif_base = <0x10280000 17 0xffff0000>;
+   audio_base = <0x17000000 18 0xffff0000>;
+   vdec_base = <0x17010000 19 0xffff0000>;
+   msdc2_base = <0x17020000 20 0xffff0000>;
+   vdec1_base = <0x17030000 21 0xffff0000>;
+   msdc3_base = <0x18000000 22 0xffff0000>;
+   ap_dma_base = <0x18010000 23 0xffff0000>;
+   gce_base = <0x18020000 24 0xffff0000>;
+   vdec2_base = <0x18040000 25 0xffff0000>;
+   vdec3_base = <0x18050000 26 0xffff0000>;
+   camsys_base = <0x18080000 27 0xffff0000>;
+   camsys1_base = <0x180a0000 28 0xffff0000>;
+   camsys2_base = <0x180b0000 29 0xffff0000>;
+   dip-cq-thread0-frame-done =
+    <225>;
+   dip-cq-thread1-frame-done =
+    <226>;
+   dip-cq-thread2-frame-done =
+    <227>;
+   dip-cq-thread3-frame-done =
+    <228>;
+   dip-cq-thread4-frame-done =
+    <229>;
+   dip-cq-thread5-frame-done =
+    <230>;
+   dip-cq-thread6-frame-done =
+    <231>;
+   dip-cq-thread7-frame-done =
+    <232>;
+   dip-cq-thread8-frame_done =
+    <233>;
+   dip-cq-thread9-frame_done =
+    <234>;
+   dip-cq-thread10-frame-done =
+    <235>;
+   dip-cq-thread11-frame-done =
+    <236>;
+   dip-cq-thread12-frame-done =
+    <237>;
+   dip-cq-thread13-frame-done =
+    <238>;
+   dip-cq-thread14-frame_done =
+    <239>;
+   dip-cq-thread15-frame-done =
+    <240>;
+   dip-cq-thread16-frame-done =
+    <241>;
+   dip-cq-thread17-frame-done =
+    <242>;
+   dip-cq-thread18-frame_done =
+    <243>;
+   dip2-cq-thread21-frame-done =
+    <214>;
+   dip2-cq-thread23-frame-done =
+    <216>;
+   wpe-b-frame-done =
+    <215>;
+   mdp-rdma0-sof = <256>;
+   mdp-rdma1-sof = <257>;
+   mdp-aal-sof = <258>;
+   mdp-aal1-sof = <259>;
+   mdp-hdr0-sof = <260>;
+   mdp-rsz0-sof = <261>;
+   mdp-rsz1-sof = <262>;
+   mdp-wrot0-sof = <263>;
+   mdp-wrot1-sof = <264>;
+   mdp-tdshp-sof = <265>;
+   mdp-tdshp1-sof = <266>;
+   img-dl_relay-sof = <267>;
+   img-dl_relay1-sof = <268>;
+   mdp-color-sof = <269>;
+   mdp-wrot1-write-frame-done = <290>;
+   mdp-wrot0-write-frame-done = <291>;
+   mdp-tdshp1-frame-done = <294>;
+   mdp-tdshp-frame-done = <295>;
+   mdp-rsz1-frame-done = <298>;
+   mdp-rsz0-frame-done = <299>;
+   mdp-rdma1-frame-done = <302>;
+   mdp-rdma0-frame-done = <303>;
+   mdp-hdr0-frame-done = <305>;
+   mdp-color-frame-done = <306>;
+   mdp-aal1-frame-done = <309>;
+   mdp-aal-frame-done = <310>;
+   interconnects =
+    <&cannon_mmqos (((0x4) << 16) | ((((2 & 0xf) << 16 | ((2 & 0x3f) << 5) | (0 & 0x1f))) & 0xffff))
+     &cannon_mmqos (((0x1) << 16) | ((0) & 0xffff))>,
+    <&cannon_mmqos (((0x4) << 16) | ((((2 & 0xf) << 16 | ((2 & 0x3f) << 5) | (1 & 0x1f))) & 0xffff))
+     &cannon_mmqos (((0x1) << 16) | ((0) & 0xffff))>,
+    <&cannon_mmqos (((0x4) << 16) | ((((2 & 0xf) << 16 | ((2 & 0x3f) << 5) | (2 & 0x1f))) & 0xffff))
+     &cannon_mmqos (((0x1) << 16) | ((0) & 0xffff))>,
+    <&cannon_mmqos (((0x4) << 16) | ((((2 & 0xf) << 16 | ((2 & 0x3f) << 5) | (3 & 0x1f))) & 0xffff))
+     &cannon_mmqos (((0x1) << 16) | ((0) & 0xffff))>,
+    <&cannon_mmqos (((0x4) << 16) | ((((2 & 0xf) << 16 | ((9 & 0x3f) << 5) | (0 & 0x1f))) & 0xffff))
+     &cannon_mmqos (((0x1) << 16) | ((0) & 0xffff))>,
+    <&cannon_mmqos (((0x4) << 16) | ((((2 & 0xf) << 16 | ((9 & 0x3f) << 5) | (1 & 0x1f))) & 0xffff))
+     &cannon_mmqos (((0x1) << 16) | ((0) & 0xffff))>,
+    <&cannon_mmqos (((0x4) << 16) | ((((2 & 0xf) << 16 | ((9 & 0x3f) << 5) | (2 & 0x1f))) & 0xffff))
+     &cannon_mmqos (((0x1) << 16) | ((0) & 0xffff))>,
+    <&cannon_mmqos (((0x4) << 16) | ((((2 & 0xf) << 16 | ((9 & 0x3f) << 5) | (3 & 0x1f))) & 0xffff))
+     &cannon_mmqos (((0x1) << 16) | ((0) & 0xffff))>,
+    <&cannon_mmqos (((0x4) << 16) | ((((2 & 0xf) << 16 | ((9 & 0x3f) << 5) | (4 & 0x1f))) & 0xffff))
+     &cannon_mmqos (((0x1) << 16) | ((0) & 0xffff))>,
+    <&cannon_mmqos (((0x4) << 16) | ((((2 & 0xf) << 16 | ((9 & 0x3f) << 5) | (5 & 0x1f))) & 0xffff))
+     &cannon_mmqos (((0x1) << 16) | ((0) & 0xffff))>,
+    <&cannon_mmqos (((0x4) << 16) | ((((2 & 0xf) << 16 | ((9 & 0x3f) << 5) | (6 & 0x1f))) & 0xffff))
+     &cannon_mmqos (((0x1) << 16) | ((0) & 0xffff))>,
+    <&cannon_mmqos (((0x4) << 16) | ((((2 & 0xf) << 16 | ((9 & 0x3f) << 5) | (7 & 0x1f))) & 0xffff))
+     &cannon_mmqos (((0x1) << 16) | ((0) & 0xffff))>,
+    <&cannon_mmqos (((0x4) << 16) | ((((2 & 0xf) << 16 | ((9 & 0x3f) << 5) | (8 & 0x1f))) & 0xffff))
+     &cannon_mmqos (((0x1) << 16) | ((0) & 0xffff))>,
+    <&cannon_mmqos (((0x4) << 16) | ((((2 & 0xf) << 16 | ((9 & 0x3f) << 5) | (9 & 0x1f))) & 0xffff))
+     &cannon_mmqos (((0x1) << 16) | ((0) & 0xffff))>,
+    <&cannon_mmqos (((0x4) << 16) | ((((2 & 0xf) << 16 | ((9 & 0x3f) << 5) | (10 & 0x1f))) & 0xffff))
+     &cannon_mmqos (((0x1) << 16) | ((0) & 0xffff))>,
+    <&cannon_mmqos (((0x4) << 16) | ((((2 & 0xf) << 16 | ((9 & 0x3f) << 5) | (11 & 0x1f))) & 0xffff))
+     &cannon_mmqos (((0x1) << 16) | ((0) & 0xffff))>,
+    <&cannon_mmqos (((0x4) << 16) | ((((2 & 0xf) << 16 | ((9 & 0x3f) << 5) | (12 & 0x1f))) & 0xffff))
+     &cannon_mmqos (((0x1) << 16) | ((0) & 0xffff))>,
+    <&cannon_mmqos (((0x4) << 16) | ((((2 & 0xf) << 16 | ((9 & 0x3f) << 5) | (13 & 0x1f))) & 0xffff))
+     &cannon_mmqos (((0x1) << 16) | ((0) & 0xffff))>,
+    <&cannon_mmqos (((0x4) << 16) | ((((2 & 0xf) << 16 | ((9 & 0x3f) << 5) | (14 & 0x1f))) & 0xffff))
+     &cannon_mmqos (((0x1) << 16) | ((0) & 0xffff))>,
+    <&cannon_mmqos (((0x4) << 16) | ((((2 & 0xf) << 16 | ((11 & 0x3f) << 5) | (0 & 0x1f))) & 0xffff))
+     &cannon_mmqos (((0x1) << 16) | ((0) & 0xffff))>,
+    <&cannon_mmqos (((0x4) << 16) | ((((2 & 0xf) << 16 | ((11 & 0x3f) << 5) | (1 & 0x1f))) & 0xffff))
+     &cannon_mmqos (((0x1) << 16) | ((0) & 0xffff))>,
+    <&cannon_mmqos (((0x4) << 16) | ((((2 & 0xf) << 16 | ((11 & 0x3f) << 5) | (2 & 0x1f))) & 0xffff))
+     &cannon_mmqos (((0x1) << 16) | ((0) & 0xffff))>,
+    <&cannon_mmqos (((0x4) << 16) | ((((2 & 0xf) << 16 | ((11 & 0x3f) << 5) | (3 & 0x1f))) & 0xffff))
+     &cannon_mmqos (((0x1) << 16) | ((0) & 0xffff))>,
+    <&cannon_mmqos (((0x4) << 16) | ((((2 & 0xf) << 16 | ((11 & 0x3f) << 5) | (4 & 0x1f))) & 0xffff))
+     &cannon_mmqos (((0x1) << 16) | ((0) & 0xffff))>,
+    <&cannon_mmqos (((0x4) << 16) | ((((2 & 0xf) << 16 | ((11 & 0x3f) << 5) | (5 & 0x1f))) & 0xffff))
+     &cannon_mmqos (((0x1) << 16) | ((0) & 0xffff))>,
+    <&cannon_mmqos (((0x4) << 16) | ((((2 & 0xf) << 16 | ((11 & 0x3f) << 5) | (6 & 0x1f))) & 0xffff))
+     &cannon_mmqos (((0x1) << 16) | ((0) & 0xffff))>,
+    <&cannon_mmqos (((0x4) << 16) | ((((2 & 0xf) << 16 | ((11 & 0x3f) << 5) | (7 & 0x1f))) & 0xffff))
+     &cannon_mmqos (((0x1) << 16) | ((0) & 0xffff))>,
+    <&cannon_mmqos (((0x4) << 16) | ((((2 & 0xf) << 16 | ((11 & 0x3f) << 5) | (8 & 0x1f))) & 0xffff))
+     &cannon_mmqos (((0x1) << 16) | ((0) & 0xffff))>,
+    <&cannon_mmqos (((0x4) << 16) | ((((2 & 0xf) << 16 | ((11 & 0x3f) << 5) | (9 & 0x1f))) & 0xffff))
+     &cannon_mmqos (((0x1) << 16) | ((0) & 0xffff))>,
+    <&cannon_mmqos (((0x4) << 16) | ((((2 & 0xf) << 16 | ((11 & 0x3f) << 5) | (10 & 0x1f))) & 0xffff))
+     &cannon_mmqos (((0x1) << 16) | ((0) & 0xffff))>,
+    <&cannon_mmqos (((0x4) << 16) | ((((2 & 0xf) << 16 | ((11 & 0x3f) << 5) | (11 & 0x1f))) & 0xffff))
+     &cannon_mmqos (((0x1) << 16) | ((0) & 0xffff))>,
+    <&cannon_mmqos (((0x4) << 16) | ((((2 & 0xf) << 16 | ((11 & 0x3f) << 5) | (12 & 0x1f))) & 0xffff))
+     &cannon_mmqos (((0x1) << 16) | ((0) & 0xffff))>,
+    <&cannon_mmqos (((0x4) << 16) | ((((2 & 0xf) << 16 | ((11 & 0x3f) << 5) | (13 & 0x1f))) & 0xffff))
+     &cannon_mmqos (((0x1) << 16) | ((0) & 0xffff))>,
+    <&cannon_mmqos (((0x4) << 16) | ((((2 & 0xf) << 16 | ((11 & 0x3f) << 5) | (14 & 0x1f))) & 0xffff))
+     &cannon_mmqos (((0x1) << 16) | ((0) & 0xffff))>,
+    <&cannon_mmqos (((0x4) << 16) | ((((2 & 0xf) << 16 | ((11 & 0x3f) << 5) | (15 & 0x1f))) & 0xffff))
+     &cannon_mmqos (((0x1) << 16) | ((0) & 0xffff))>,
+    <&cannon_mmqos (((0x4) << 16) | ((((2 & 0xf) << 16 | ((11 & 0x3f) << 5) | (16 & 0x1f))) & 0xffff))
+     &cannon_mmqos (((0x1) << 16) | ((0) & 0xffff))>,
+    <&cannon_mmqos (((0x4) << 16) | ((((2 & 0xf) << 16 | ((11 & 0x3f) << 5) | (17 & 0x1f))) & 0xffff))
+     &cannon_mmqos (((0x1) << 16) | ((0) & 0xffff))>,
+    <&cannon_mmqos (((0x4) << 16) | ((((2 & 0xf) << 16 | ((11 & 0x3f) << 5) | (18 & 0x1f))) & 0xffff))
+     &cannon_mmqos (((0x1) << 16) | ((0) & 0xffff))>,
+    <&cannon_mmqos (((0x4) << 16) | ((((2 & 0xf) << 16 | ((11 & 0x3f) << 5) | (19 & 0x1f))) & 0xffff))
+     &cannon_mmqos (((0x1) << 16) | ((0) & 0xffff))>,
+    <&cannon_mmqos (((0x4) << 16) | ((((2 & 0xf) << 16 | ((11 & 0x3f) << 5) | (20 & 0x1f))) & 0xffff))
+     &cannon_mmqos (((0x1) << 16) | ((0) & 0xffff))>,
+    <&cannon_mmqos (((0x4) << 16) | ((((2 & 0xf) << 16 | ((11 & 0x3f) << 5) | (21 & 0x1f))) & 0xffff))
+     &cannon_mmqos (((0x1) << 16) | ((0) & 0xffff))>,
+    <&cannon_mmqos (((0x4) << 16) | ((((2 & 0xf) << 16 | ((11 & 0x3f) << 5) | (22 & 0x1f))) & 0xffff))
+     &cannon_mmqos (((0x1) << 16) | ((0) & 0xffff))>,
+    <&cannon_mmqos (((0x4) << 16) | ((((2 & 0xf) << 16 | ((11 & 0x3f) << 5) | (23 & 0x1f))) & 0xffff))
+     &cannon_mmqos (((0x1) << 16) | ((0) & 0xffff))>,
+    <&cannon_mmqos (((0x4) << 16) | ((((2 & 0xf) << 16 | ((11 & 0x3f) << 5) | (24 & 0x1f))) & 0xffff))
+     &cannon_mmqos (((0x1) << 16) | ((0) & 0xffff))>,
+    <&cannon_mmqos (((0x4) << 16) | ((((2 & 0xf) << 16 | ((11 & 0x3f) << 5) | (25 & 0x1f))) & 0xffff))
+     &cannon_mmqos (((0x1) << 16) | ((0) & 0xffff))>;
+    interconnect-names =
+     "mdp_rdma0",
+     "mdp_rdma1",
+     "mdp_wrot0",
+     "mdp_wrot1",
+     "l9_img_imgi_d1",
+     "l9_img_imgbi_d1",
+     "l9_img_dmgi_d1",
+     "l9_img_depi_d1",
+     "l9_img_ice_d1",
+     "l9_img_smti_d1",
+     "l9_img_smto_d2",
+     "l9_img_smto_d1",
+     "l9_img_crzo_d1",
+     "l9_img_img3o_d1",
+     "l9_img_vipi_d1",
+     "l9_img_smti_d5",
+     "l9_img_timgo_d1",
+     "l9_img_ufbc_w0",
+     "l9_img_ufbc_r0",
+     "l11_img_imgi_d1",
+     "l11_img_imgbi_d1",
+     "l11_img_dmgi_d1",
+     "l11_img_depi_d1",
+     "l11_img_ice_d1",
+     "l11_img_smti_d1",
+     "l11_img_smto_d2",
+     "l11_img_smto_d1",
+     "l11_img_crzo_d1",
+     "l11_img_img3o_d1",
+     "l11_img_vipi_d1",
+     "l11_img_smti_d5",
+     "l11_img_timgo_d1",
+     "l11_img_ufbc_w0",
+     "l11_img_ufbc_r0",
+     "l11_img_wpe_rdma1",
+     "l11_img_wpe_rdma0",
+     "l11_img_wpe_wdma",
+     "l11_img_mfb_rdma0",
+     "l11_img_mfb_rdma1",
+     "l11_img_mfb_rdma2",
+     "l11_img_mfb_rdma3",
+     "l11_img_mfb_rdma4",
+     "l11_img_mfb_rdma5",
+     "l11_img_mfb_wdma0",
+     "l11_img_mfb_wdma1";
+   operating-points-v2 = <&cannon_mdp_fixed_opp>, <&cannon_cam_fixed_opp>;
+   mdp-opp = <&cannon_mdp_fixed_opp>;
+   isp-opp = <&cannon_cam_fixed_opp>;
+   mdp-dvfsrc-vcore-supply = <&cannon_dvfsrc_vcore>;
+   isp-dvfsrc-vcore-supply = <&cannon_dvfsrc_vcore>;
+   dre30-hist-sram-start = /bits/ 16 <1536>;
+  };
+
+};
+
+// Data imports need the real MDP IOMMU client; command packets use GCE DMA.
+/* Native MT6853 MDPSYS consumer binding (single LARB per DMA client). */
+&{/mdpsys_config@1f000000} {
+ dma-ranges = <0x2 0x0 0x2 0x0 0x1 0x0>;
+ iommus = <0x83 0x20040 0x83 0x20041 0x83 0x20042 0x83 0x20043>;
+ dma-mask-bit = <34>;
+};

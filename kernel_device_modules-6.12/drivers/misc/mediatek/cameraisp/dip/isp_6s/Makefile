@@ -33,3 +33,9 @@ ccflags-y += -I$(DEVICE_MODULES_PATH)/drivers/misc/mediatek/cmdq/mailbox/
 
 # obj-$(CONFIG_MTK_CAMERA_DIP_ISP6S) += camera_dip_isp6s.o
 # camera_dip_isp6s-objs += camera_dip.o
+ifeq ($(CONFIG_CANNON_BRINGUP),y)
+obj-$(CONFIG_MTK_CAMERA_DIP_ISP6S) += camera_dip_isp6s.o
+camera_dip_isp6s-objs := camera_dip.o
+endif
+
+ccflags-$(CONFIG_CANNON_BRINGUP) += -DMTK_DIP_COUNT=1 -DMTK_MSF_OFFSET=1

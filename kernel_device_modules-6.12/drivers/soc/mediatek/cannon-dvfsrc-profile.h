@@ -1,0 +1,119 @@
+/*
+ * Copyright (C) 2019 MediaTek Inc.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See http://www.gnu.org/licenses/gpl-2.0.html for more details.
+ */
+
+/* MT6853 register profile from the running 4.14 source (f6f89c0ee).
+ * Numeric offsets retain that platform's enabled FB_MD_TABLE_SWITCH profile.
+ * Only used by Cannon's legacy-firmware init path.
+ */
+#ifndef CANNON_DVFSRC_PROFILE_H
+#define CANNON_DVFSRC_PROFILE_H
+struct cannon_dvfsrc_reg { int offset; u32 val; };
+static const struct cannon_dvfsrc_reg cannon_dvfsrc_init_configs[][128] = {
+ {
+  { (0xA60), 0x0000001E },
+  { (0x314), 0x00001965 },
+  { (0xF8), 0x00000015 },
+  { (0x318), 0x000EE000 },
+
+  { (0xA34), 0x00000019 },
+  { (0xA38), 0x00000026 },
+  { (0xA3C), 0x00000033 },
+  { (0xA40), 0x0000003B },
+  { (0xA44), 0x0000004C },
+  { (0xD18), 0x00000066 },
+  { (0xD1C), 0x00000066 },
+
+  { (0x100), 0x50436053 },
+  { (0x104), 0x40335042 },
+  { (0x108), 0x40314032 },
+  { (0x10C), 0x30223023 },
+  { (0x110), 0x20133021 },
+  { (0x114), 0x20112012 },
+  { (0x118), 0x10032010 },
+  { (0x11C), 0x10011002 },
+  { (0xD4C), 0x00131000 },
+  { (0xD50), 0x00110012},
+  { (0xD54), 0x00000010 },
+
+  { (0x30C), 0x00000040 },
+  { (0x294), 0x00000004 },
+  { (0xA64), 0x000D20D2 },
+  { (0xA68), 0x00200802 },
+  { (0xA6C), 0x00200802 },
+  { (0xA70), 0x00200800 },
+  { (0xA74), 0x00400802 },
+  { (0xA78), 0x00601404 },
+  { (0xA7C), 0x00D02C09 },
+  { (0xA80), 0x00000012 },
+  { (0xA84), 0x00000024 },
+  { (0xAA8), 0x00000000 },
+  { (0xAAC), 0x00000000 },
+  { (0xAB0), 0x00034800 },
+  { (0xA88), 0x04B12C4B },
+  { (0xA8C), 0x04B12C4B },
+  { (0xA90), 0x04B12C00 },
+  { (0xA94), 0x04B12C4B },
+  { (0xA98), 0x04B12C4B },
+  { (0xA9C), 0x04B12C4B },
+  { (0xAA0), 0x0000004B },
+  { (0xAA4), 0x0000005C },
+  { (0xAB4), 0x00000000 },
+  { (0xAB8), 0x00000000 },
+  { (0xABC), 0x00034800 },
+
+  { (0x534), 0x40444440 },
+  { (0x538), 0x22244444 },
+  { (0x53C), 0x00400444 },
+  { (0x540), 0x60000000 },
+  { (0x524), 0x20222220 },
+  { (0x528), 0x00022222},
+  { (0x52C), 0x00200222 },
+  { (0x530), 0x60000000 },
+  { (0x544), 0x00000006 },
+  { (0x614), 0x00000001 },
+  { (0xA00), 0x00004321 },
+  { (0xA08), 0x00000065 },
+  { (0xAE0), 0x66543210 },
+  { (0xAC4), 0x66654321 },
+  { (0xA10), 0x54321000 },
+  { (0xA18), 0x66000000 },
+  { (0x308), 0x4C2D0000 },
+  { (0xA14), 0x66543210 },
+  { (0xE4), 0x00010A29 },
+
+  { (0xD38), 0x18A618A6 },
+  { (0xAC8), 0x18A61183 },
+  { (0xACC), 0x0D690B80 },
+  { (0xAD0), 0x070804B0 },
+  { (0xD3C), 0x18A518A5 },
+  { (0xAD4), 0x18A51182 },
+  { (0xAD8), 0x0D680B7F},
+  { (0xADC), 0x070704AF },
+
+  { (0x310), 0x00000006 },
+  { (0xC8), 0x00000002 },
+  { (0x280), 0x0000407C },
+
+  { (0xD6C), 0x00000001 },
+  { (0x0), 0x6698444B },
+  { (0x0), 0x6698054B },
+  { (0xD6C), 0x00000000 },
+  { -1, 0 },
+ },
+
+ {
+  { -1, 0 },
+ },
+};
+
+#endif

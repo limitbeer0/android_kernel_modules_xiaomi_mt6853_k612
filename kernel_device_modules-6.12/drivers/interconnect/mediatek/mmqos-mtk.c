@@ -1632,7 +1632,7 @@ static struct icc_node *mtk_mmqos_xlate(
 		return ERR_PTR(-EPROBE_DEFER);
 	icc_data = (struct icc_onecell_data *)data;
 	for (i = 0; i < icc_data->num_nodes; i++)
-		if (icc_data->nodes[i]->id == spec->args[0])
+		if (icc_data->nodes[i] && icc_data->nodes[i]->id == spec->args[0])
 			return icc_data->nodes[i];
 	pr_notice("%s: invalid index %u\n", __func__, spec->args[0]);
 	return ERR_PTR(-EINVAL);
@@ -2394,6 +2394,66 @@ static int get_from_larb_ssc_map(larb_sub_comm_ostdl *larb_ssc_ostdl, int larb_i
 }
 
 static bool mmqos_met_not_freerun;
+#if IS_ENABLED(CONFIG_CANNON_BRINGUP)
+/* Reject incomplete supplier bindings before publishing a partial ICC graph. */
+static int cannon_mmqos_ready(struct platform_device *pdev)
+{
+	static const char * const supplies[] = {
+		"mediatek,commons-supply", "mediatek,larbs-supply"
+	};
+	struct device_node *node;
+	struct platform_device *supplier;
+	struct regulator *regulator;
+	struct icc_path *path;
+	unsigned int i, j;
+	int ret;
+
+	if (!mtk_dramc_get_ddr_type() || !mtk_dramc_get_ch_cnt() ||
+	    mtk_dramc_get_steps_freq(0) <= 0)
+		return -EPROBE_DEFER;
+	for (i = 0; i < ARRAY_SIZE(supplies); i++) {
+		for (j = 0; ; j++) {
+			node = of_parse_phandle(pdev->dev.of_node, supplies[i], j);
+			if (!node)
+				break;
+			supplier = of_find_device_by_node(node);
+			of_node_put(node);
+			if (!supplier)
+				return -EPROBE_DEFER;
+			if (!supplier->dev.driver) {
+				put_device(&supplier->dev);
+				return -EPROBE_DEFER;
+			}
+			if (!i) {
+				regulator = regulator_get_optional(&supplier->dev, "mmdvfs-dvfsrc-vcore");
+				if (IS_ERR(regulator)) {
+					ret = PTR_ERR(regulator);
+					put_device(&supplier->dev);
+					return ret;
+				}
+				regulator_put(regulator);
+			}
+			put_device(&supplier->dev);
+		}
+		if (!j)
+			return -EINVAL;
+	}
+	path = of_icc_get(&pdev->dev, "icc-bw");
+	if (IS_ERR(path))
+		return PTR_ERR(path);
+	if (!path)
+		return -ENODEV;
+	icc_put(path);
+	path = of_icc_get(&pdev->dev, "icc-hrt-bw");
+	if (IS_ERR(path))
+		return PTR_ERR(path);
+	if (!path)
+		return -ENODEV;
+	icc_put(path);
+	return 0;
+}
+#endif
+
 int mtk_mmqos_probe(struct platform_device *pdev)
 {
 	struct mtk_mmqos *mmqos;
@@ -2407,7 +2467,7 @@ int mtk_mmqos_probe(struct platform_device *pdev)
 	struct larb_port_node *larb_port_node;
 	struct mtk_iommu_data *smi_imu;
 	int i, j, id, num_larbs = 0, ret, ddr_type, io_width;
-#if IS_ENABLED(CONFIG_MTK_DRAMC) && IS_ENABLED(CONFIG_MTK_EMI)
+#if IS_ENABLED(CONFIG_MTK_DRAMC) && (IS_ENABLED(CONFIG_MTK_EMI) || IS_ENABLED(CONFIG_CANNON_BRINGUP))
 	int max_freq, chn_cnt;
 #endif
 	const struct mtk_mmqos_desc *mmqos_desc;
@@ -2424,6 +2484,11 @@ int mtk_mmqos_probe(struct platform_device *pdev)
 	larb_sub_comm_ostdl larb_ssc_ostdl;
 	struct of_phandle_args args;
 
+#if IS_ENABLED(CONFIG_CANNON_BRINGUP)
+	ret = cannon_mmqos_ready(pdev);
+	if (ret)
+		return dev_err_probe(&pdev->dev, ret, "Cannon MMQoS suppliers not ready\n");
+#endif
 	mmqos = devm_kzalloc(&pdev->dev, sizeof(*mmqos), GFP_KERNEL);
 	if (!mmqos)
 		return -ENOMEM;
@@ -2526,6 +2591,17 @@ int mtk_mmqos_probe(struct platform_device *pdev)
 	}
 	for (i = 0; i < mmqos_desc->num_nodes; i++) {
 		node_desc = &mmqos_desc->nodes[i];
+#if IS_ENABLED(CONFIG_CANNON_BRINGUP)
+		/* Publish only ports with a bound, native SMI LARB supplier.
+		 * Missing peripherals must fail lookup rather than accept no-op BW.
+		 */
+		if (NODE_TYPE(node_desc->id) == MTK_MMQOS_NODE_LARB &&
+		    !smi_imu->larb_imu[node_desc->id & (MTK_LARB_NR_MAX - 1)].dev)
+			continue;
+		if (NODE_TYPE(node_desc->id) == MTK_MMQOS_NODE_LARB_PORT &&
+		    !smi_imu->larb_imu[(node_desc->id >> 5) & (MTK_LARB_NR_MAX - 1)].dev)
+			continue;
+#endif
 		node = mtk_icc_node_create(node_desc->id);
 		if (IS_ERR(node)) {
 			ret = PTR_ERR(node);
@@ -2753,7 +2829,12 @@ int mtk_mmqos_probe(struct platform_device *pdev)
 	else
 		io_width = 2;
 
-#if IS_ENABLED(CONFIG_MTK_DRAMC) && IS_ENABLED(CONFIG_MTK_EMI)
+#if IS_ENABLED(CONFIG_CANNON_BRINGUP) && IS_ENABLED(CONFIG_MTK_DRAMC)
+	max_freq = mtk_dramc_get_steps_freq(0);
+	chn_cnt = mtk_dramc_get_ch_cnt();
+	hrt->hrt_total_bw = calculate_hrt_total_bw(max_freq, chn_cnt, io_width,
+								hrt->hrt_total_bw);
+#elif IS_ENABLED(CONFIG_MTK_DRAMC) && IS_ENABLED(CONFIG_MTK_EMI)
 	max_freq = mtk_dramc_get_steps_freq(0);
 	chn_cnt = mtk_emicen_get_ch_cnt();
 	hrt->hrt_total_bw = calculate_hrt_total_bw(max_freq, chn_cnt, io_width,
@@ -2765,7 +2846,8 @@ int mtk_mmqos_probe(struct platform_device *pdev)
 	mtk_mmqos_init_hrt(hrt);
 	g_hrt = hrt;
 	mmqos->nb.notifier_call = update_mm_clk;
-	register_mmdvfs_notifier(&mmqos->nb);
+	if (!IS_ENABLED(CONFIG_CANNON_BRINGUP))
+		register_mmdvfs_notifier(&mmqos->nb);
 	ret = mtk_mmqos_register_hrt_sysfs(&pdev->dev);
 	if (ret)
 		dev_notice(&pdev->dev, "sysfs create fail\n");
@@ -2937,7 +3019,8 @@ void mtk_mmqos_remove(struct platform_device *pdev)
 		mtk_icc_node_destroy(node->id);
 	}
 	mtk_icc_provider_del(&mmqos->prov);
-	unregister_mmdvfs_notifier(&mmqos->nb);
+	if (!IS_ENABLED(CONFIG_CANNON_BRINGUP))
+		unregister_mmdvfs_notifier(&mmqos->nb);
 	//destroy_workqueue(mmqos->wq);
 	mtk_mmqos_unregister_hrt_sysfs(&pdev->dev);
 
@@ -3452,7 +3535,7 @@ struct device *get_larb_dev(int larb_id)
 
 	icc_data = (struct icc_onecell_data *)gmmqos->prov.data;
 	for (i = 0; i < icc_data->num_nodes; i++)
-		if (icc_data->nodes[i]->id == SLAVE_LARB(larb_id)) {
+		if (icc_data->nodes[i] && icc_data->nodes[i]->id == SLAVE_LARB(larb_id)) {
 			node = icc_data->nodes[i];
 			larb_node = (struct larb_node *)node->data;
 			MMQOS_DBG("found larb id:%d", larb_id);

@@ -31,7 +31,7 @@ int apu_device_power_suspend(enum DVFS_USER user, int is_suspend)
 
 	ad = apu_find_device(user);
 	if (IS_ERR_OR_NULL(ad)) {
-		apower_err(ad->dev, "[%s] called by no-exist user (%d)\n",
+		pr_err("apusys: [%s] called by no-exist user (%d)\n",
 				__func__, ori_usr);
 		ret = -EFAULT;
 		goto out;
@@ -59,17 +59,15 @@ int apu_device_power_on(enum DVFS_USER user)
 
 	ad = apu_find_device(user);
 	if (IS_ERR_OR_NULL(ad)) {
-		apower_err(ad->dev, "[%s] called by no-exist user (%d)\n",
+		pr_err("apusys: [%s] called by no-exist user (%d)\n",
 				__func__, ori_usr);
 		ret = -EFAULT;
 		goto out;
 	}
 	apower_info(ad->dev, "[%s] called by %s\n", __func__, apu_dev_string(ori_usr));
-	ret = pm_runtime_get_sync(ad->dev);
-	/* Ignore suppliers with disabled runtime PM. */
-	if (ret < 0 && ret != -EACCES) {
+	ret = pm_runtime_resume_and_get(ad->dev);
+	if (ret < 0) {
 		apower_err(ad->dev, "[%s] fail, ret %d\n", __func__, ret);
-		pm_runtime_put_noidle(ad->dev);
 		goto out;
 	}
 
@@ -213,6 +211,11 @@ EXPORT_SYMBOL(apu_power_reg_dump);
 
 bool apusys_power_check(void)
 {
+#if IS_ENABLED(CONFIG_CANNON_BRINGUP)
+	return !IS_ERR_OR_NULL(apu_find_device(APUCORE)) &&
+	       !IS_ERR_OR_NULL(apu_find_device(APUCONN)) &&
+	       !IS_ERR_OR_NULL(apu_find_device(VPU0));
+#endif
 /* TODO
  *	char *pwr_ptr;
  *	bool pwr_status = true;
@@ -335,84 +338,49 @@ struct platform_driver apusys_power_driver = {
 	},
 };
 
-int apu_power_init(void)
-{
-	int ret = 0;
-
-	ret = devfreq_add_governor(&agov_passive);
-	if (ret)
-		return ret;
-	ret = devfreq_add_governor(&agov_userspace);
-	if (ret)
-		return ret;
-	ret = devfreq_add_governor(&agov_constrain);
-	if (ret)
-		return ret;
-	ret = devfreq_add_governor(&agov_passive_pe);
-	if (ret)
-		return ret;
-	ret = platform_driver_register(&apu_rpc_driver);
-	if (ret)
-		return ret;
-	ret = platform_driver_register(&core_devfreq_driver);
-	if (ret)
-		return ret;
-	ret = platform_driver_register(&con_devfreq_driver);
-	if (ret)
-		return ret;
-	ret = platform_driver_register(&iommu_devfreq_driver);
-	if (ret)
-		return ret;
-	ret = platform_driver_register(&apu_cb_driver);
-	if (ret)
-		return ret;
-	ret = platform_driver_register(&vpu_devfreq_driver);
-	if (ret)
-		return ret;
-
-	ret = platform_driver_register(&mdla_devfreq_driver);
-	if (ret)
-		return ret;
-	ret = platform_driver_register(&apusys_power_driver);
-	if (ret)
-		return ret;
-	ret = platform_driver_register(&vb_driver);
-	if (ret)
-		return ret;
-	return 0;
-}
+static struct devfreq_governor * const apu_governors[] = {
+	&agov_passive, &agov_userspace, &agov_constrain, &agov_passive_pe,
+};
+static struct platform_driver * const apu_drivers[] = {
+	&apu_rpc_driver, &core_devfreq_driver, &con_devfreq_driver,
+	&iommu_devfreq_driver, &apu_cb_driver, &vpu_devfreq_driver,
+	&mdla_devfreq_driver, &apusys_power_driver, &vb_driver,
+};
+static unsigned int apu_registered_governors, apu_registered_drivers;
 
 void apu_power_exit(void)
 {
-	int ret = 0;
+	int ret;
 
-	platform_driver_unregister(&vb_driver);
-	platform_driver_unregister(&mdla_devfreq_driver);
-	platform_driver_unregister(&vpu_devfreq_driver);
-	platform_driver_unregister(&apu_cb_driver);
-	platform_driver_unregister(&apusys_power_driver);
-	platform_driver_unregister(&iommu_devfreq_driver);
-	platform_driver_unregister(&con_devfreq_driver);
-	platform_driver_unregister(&core_devfreq_driver);
-	platform_driver_unregister(&apu_rpc_driver);
+	while (apu_registered_drivers)
+		platform_driver_unregister(apu_drivers[--apu_registered_drivers]);
+	while (apu_registered_governors) {
+		struct devfreq_governor *gov = apu_governors[--apu_registered_governors];
 
-	ret = devfreq_remove_governor(&agov_constrain);
-	if (ret)
-		pr_info("[%s] failed remove gov %s %d\n",
-			__func__, agov_constrain.name, ret);
+		ret = devfreq_remove_governor(gov);
+		if (ret)
+			pr_err("apusys: remove governor %s failed: %d\n", gov->name, ret);
+	}
+}
 
-	ret = devfreq_remove_governor(&agov_passive);
-	if (ret)
-		pr_info("[%s] failed remove gov %s %d\n",
-			__func__, agov_passive.name, ret);
+int apu_power_init(void)
+{
+	int ret;
 
-	ret = devfreq_remove_governor(&agov_userspace);
-	if (ret)
-		pr_info("[%s] failed remove gov %s %d\n",
-			__func__, agov_userspace.name, ret);
-
-	ret = devfreq_remove_governor(&agov_passive_pe);
-	if (ret)
-		pr_info("[%s] failed remove gov %s %d\n",
-			__func__, agov_passive_pe.name, ret);
+	while (apu_registered_governors < ARRAY_SIZE(apu_governors)) {
+		ret = devfreq_add_governor(apu_governors[apu_registered_governors]);
+		if (ret)
+			goto undo;
+		apu_registered_governors++;
+	}
+	while (apu_registered_drivers < ARRAY_SIZE(apu_drivers)) {
+		ret = platform_driver_register(apu_drivers[apu_registered_drivers]);
+		if (ret)
+			goto undo;
+		apu_registered_drivers++;
+	}
+	return 0;
+undo:
+	apu_power_exit();
+	return ret;
 }

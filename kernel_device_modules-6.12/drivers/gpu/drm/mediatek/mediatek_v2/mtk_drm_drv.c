@@ -13007,6 +13007,13 @@ void mtk_drm_get_chipid(struct mtk_drm_private *private)
 		private->sw_ver, chip_id->hw_ver, chip_id->hw_code, chip_id->hw_subcode);
 }
 
+#if IS_ENABLED(CONFIG_CANNON_BRINGUP)
+static void cannon_drm_unregister_pm(void *data)
+{
+	unregister_pm_notifier(data);
+}
+#endif
+
 static int mtk_drm_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
@@ -13222,6 +13229,17 @@ SKIP_MMLSYS_CONFIG:
 	ret = register_pm_notifier(&private->kernel_pm.nb);
 	if (ret)
 		DDPMSG("register_pm_notifier failed %d", ret);
+#if IS_ENABLED(CONFIG_CANNON_BRINGUP)
+	if (ret)
+		return ret;
+	/* Probe may defer after this point. Never leave a notifier into devm
+	 * memory behind for the next attempt or a suspend notification.
+	 */
+	ret = devm_add_action_or_reset(dev, cannon_drm_unregister_pm,
+				      &private->kernel_pm.nb);
+	if (ret)
+		return ret;
+#endif
 
 #if IS_ENABLED(CONFIG_MTK_TINYSYS_VCP_SUPPORT) && !IS_ENABLED(CONFIG_DRM_MEDIATEK_AUTO_YCT)
 	private->kernel_pm.vcp_nb.notifier_call = mtk_drm_vcp_notifier;
@@ -13532,6 +13550,10 @@ static void mtk_drm_remove(struct platform_device *pdev)
 	struct drm_device *drm = private->drm;
 	int i;
 
+#if IS_ENABLED(CONFIG_CANNON_BRINGUP)
+	devm_release_action(&pdev->dev, cannon_drm_unregister_pm,
+			    &private->kernel_pm.nb);
+#endif
 	drm_dev_unregister(drm);
 	mtk_drm_kms_deinit(drm);
 	drm_dev_put(drm);

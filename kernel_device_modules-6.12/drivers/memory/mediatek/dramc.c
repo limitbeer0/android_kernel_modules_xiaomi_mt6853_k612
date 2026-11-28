@@ -238,8 +238,7 @@ static int dramc_probe(struct platform_device *pdev)
 	int ret;
 
 	pr_info("%s: module probe.\n", __func__);
-	dramc_pdev = pdev;
-	dramc_dev_ptr = devm_kmalloc(&pdev->dev,
+	dramc_dev_ptr = devm_kzalloc(&pdev->dev,
 		sizeof(struct dramc_dev_t), GFP_KERNEL);
 
 	if (!dramc_dev_ptr)
@@ -335,6 +334,14 @@ static int dramc_probe(struct platform_device *pdev)
 		pr_info("regulator_enable vdram2 success: %d\n", retval);
 	}
 
+#if IS_ENABLED(CONFIG_CANNON_BRINGUP)
+	if (!dramc_dev_ptr->support_ch_cnt || dramc_dev_ptr->support_ch_cnt > 2 ||
+	    !dramc_dev_ptr->ch_cnt || dramc_dev_ptr->ch_cnt > dramc_dev_ptr->support_ch_cnt ||
+	    !dramc_dev_ptr->rk_cnt || dramc_dev_ptr->rk_cnt > 2 ||
+	    !dramc_dev_ptr->freq_cnt || dramc_dev_ptr->freq_cnt > 16 ||
+	    !dramc_dev_ptr->mr_cnt || dramc_dev_ptr->mr_cnt > 16)
+		return dev_err_probe(&pdev->dev, -EINVAL, "Invalid LK DRAM layout\n");
+#endif
 	size = sizeof(unsigned int) * dramc_dev_ptr->rk_cnt;
 	dramc_dev_ptr->rk_size = devm_kmalloc(&pdev->dev, size, GFP_KERNEL);
 	if (!(dramc_dev_ptr->rk_size))
@@ -373,9 +380,12 @@ static int dramc_probe(struct platform_device *pdev)
 		return -EINVAL;
 	}
 
-	dramc_dev_ptr->sleep_base = of_iomap(dramc_node,
-		dramc_dev_ptr->support_ch_cnt * 4);
-	if (IS_ERR(dramc_dev_ptr->sleep_base)) {
+	res = platform_get_resource(pdev, IORESOURCE_MEM, dramc_dev_ptr->support_ch_cnt * 4);
+	if (!res)
+		return -EINVAL;
+	/* Shared SPM registers: map read-only users without claiming SCPSYS's resource. */
+	dramc_dev_ptr->sleep_base = devm_ioremap(&pdev->dev, res->start, resource_size(res));
+	if (!dramc_dev_ptr->sleep_base) {
 		pr_info("%s: unable to map sleep base\n", __func__);
 		return -EINVAL;
 	}
@@ -454,7 +464,7 @@ static int dramc_probe(struct platform_device *pdev)
 	pr_info("%s: fmeter_sub_version(%d)\n", __func__, fmeter_sub_version);
 
 	if (fmeter_version == 0) {
-		dramc_dev_ptr->fmeter_dev_ptr = devm_kmalloc(&pdev->dev,
+		dramc_dev_ptr->fmeter_dev_ptr = devm_kzalloc(&pdev->dev,
 			sizeof(struct fmeter_dev_t), GFP_KERNEL);
 		if (!(dramc_dev_ptr->fmeter_dev_ptr)) {
 			pr_info("%s: memory  alloc fail\n", __func__);
@@ -466,7 +476,7 @@ static int dramc_probe(struct platform_device *pdev)
 			return -EINVAL;
 		}
 	} else if (fmeter_version == 1 || fmeter_version == 2 || fmeter_version == 3) {
-		dramc_dev_ptr->fmeter_dev_ptr = devm_kmalloc(&pdev->dev,
+		dramc_dev_ptr->fmeter_dev_ptr = devm_kzalloc(&pdev->dev,
 			sizeof(struct fmeter_dev_t), GFP_KERNEL);
 		if (!(dramc_dev_ptr->fmeter_dev_ptr)) {
 			pr_info("%s: memory  alloc fail\n", __func__);
@@ -478,7 +488,7 @@ static int dramc_probe(struct platform_device *pdev)
 			return -EINVAL;
 		}
 	} else if (fmeter_version == 41) {
-		dramc_dev_ptr->fmeter_dev_ptr = devm_kmalloc(&pdev->dev,
+		dramc_dev_ptr->fmeter_dev_ptr = devm_kzalloc(&pdev->dev,
 			sizeof(struct fmeter_dev_t), GFP_KERNEL);
 		if (!(dramc_dev_ptr->fmeter_dev_ptr)) {
 			pr_info("%s: memory  alloc fail\n", __func__);
@@ -530,6 +540,7 @@ static int dramc_probe(struct platform_device *pdev)
 	}
 
 	platform_set_drvdata(pdev, dramc_dev_ptr);
+	dramc_pdev = pdev;
 	pr_info("%s: DRAM data type = %d\n", __func__,
 		mtk_dramc_get_ddr_type());
 
@@ -1107,6 +1118,17 @@ unsigned int mtk_dramc_get_ddr_type(void)
 	return dramc_dev_ptr->dram_type;
 }
 EXPORT_SYMBOL(mtk_dramc_get_ddr_type);
+
+unsigned int mtk_dramc_get_ch_cnt(void)
+{
+	struct dramc_dev_t *data;
+
+	if (!dramc_pdev)
+		return 0;
+	data = platform_get_drvdata(dramc_pdev);
+	return data ? data->ch_cnt : 0;
+}
+EXPORT_SYMBOL_GPL(mtk_dramc_get_ch_cnt);
 
 static void dramc_remove(struct platform_device *pdev)
 {

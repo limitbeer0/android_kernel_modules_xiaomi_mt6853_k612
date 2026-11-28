@@ -306,3 +306,5 @@
 /include/ "cannon-mt6360.dtsi"
 /include/ "cannon-fpc1022.dtsi"
 /include/ "cannon-camera.dtsi"
+
+/include/ "cannon-mdp.dtsi"

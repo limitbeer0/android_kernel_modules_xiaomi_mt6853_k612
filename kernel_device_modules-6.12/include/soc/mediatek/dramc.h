@@ -82,6 +82,7 @@ enum DRAM_TYPE {
 
 int mtk_dramc_get_steps_freq(unsigned int step);
 unsigned int mtk_dramc_get_ddr_type(void);
+unsigned int mtk_dramc_get_ch_cnt(void);
 unsigned int mtk_dramc_get_data_rate(void);
 unsigned int mtk_dramc_get_mr4(unsigned int ch);
 

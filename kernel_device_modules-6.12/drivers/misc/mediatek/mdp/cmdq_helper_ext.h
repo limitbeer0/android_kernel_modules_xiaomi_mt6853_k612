@@ -1017,7 +1017,7 @@ s32 cmdq_helper_mbox_register(struct device *dev);
 struct cmdq_client *cmdq_helper_mbox_client(u32 idx);
 struct cmdq_base *cmdq_helper_mbox_base(void);
 void cmdq_helper_mbox_clear_pools(void);
-void cmdq_core_initialize(void);
+int cmdq_core_initialize(void);
 void cmdq_core_late_init(void);
 void cmdq_core_deinitialize(void);
 unsigned long cmdq_get_tracing_mark(void);
@@ -1032,3 +1032,5 @@ void mdp_set_resource_callback(enum cmdq_event res_event,
 	CmdqResourceReleaseCB res_release);
 
 #endif
+
+void cmdq_core_flush_thread_work_queues(void);

@@ -6,6 +6,10 @@ import sys
 text = Path(sys.argv[1]).read_text().splitlines()
 config = dict(line.split("=", 1) for line in text if line.startswith("CONFIG_") and "=" in line)
 required = {
+    "MTK_MDP": "m", "MTK_MDP_MT6853": "m",
+    "MTK_CAMERA_ISP_SUPPORT": "y", "MTK_CAMERA_ISP_RAW_SUPPORT": "m",
+    "MTK_CAMERA_DIP_ISP6S": "m", "MTK_CAM_TIMESYNC": "m", "MTK_DVFSRC": "m", "MTK_DRAMC": "m",
+    "INTERCONNECT_MTK_MMQOS_MT6853": "m", "INTERCONNECT_MTK_EXTENSION": "m",
     "CANNON_BRINGUP": "y", "ARM64_4K_PAGES": "y", "MODULES": "y",
     "SECURITY_SELINUX": "y",
     "PSTORE": "y", "PSTORE_CONSOLE": "y", "PSTORE_PMSG": "y", "PSTORE_RAM": "y",

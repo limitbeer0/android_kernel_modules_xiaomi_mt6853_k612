@@ -2272,7 +2272,9 @@ static void cmdq_mdp_init_pmqos(struct platform_device *pdev)
 
 	if (cmdq_mdp_get_func()->mdpIsCaminSupport()) {
 		CMDQ_LOG("%s Create opp table : isp-opp\n", __func__);
+		#if !IS_ENABLED(CONFIG_CANNON_BRINGUP)
 		dev_pm_opp_of_add_table_indexed(&pdev->dev, 1);
+#endif
 	}
 
 	/* number of available opp */
@@ -2429,6 +2431,52 @@ void cmdq_mdp_init(struct platform_device *pdev)
 	CMDQ_LOG("%s --\n", __func__);
 
 }
+
+#if IS_ENABLED(CONFIG_CANNON_BRINGUP)
+int cannon_mdp_common_ready(void)
+{
+	if (!mdp_ctx.resource_check_queue || !mdp_ctx.handle_consume_queue ||
+	    mdp_pmqos_opp_num != 1 || !mdp_pmqos_freq || !mdp_volts ||
+	    IS_ERR_OR_NULL(mdp_mmdvfs_reg))
+		return -EINVAL;
+	if (cmdq_mdp_get_func()->mdpIsCaminSupport() &&
+	    (!isp_pmqos_freq || !isp_volts || IS_ERR_OR_NULL(isp_mmdvfs_reg)))
+		return -EINVAL;
+	return 0;
+}
+
+void cannon_mdp_common_release(struct platform_device *pdev)
+{
+	struct ResourceUnitStruct *resource, *next;
+
+	cmdq_core_remove_status_dump(&mdp_status_dump_notify);
+	cancel_work_sync(&mdp_ctx.handle_consume_item);
+	if (mdp_ctx.handle_consume_queue) {
+		destroy_workqueue(mdp_ctx.handle_consume_queue);
+		mdp_ctx.handle_consume_queue = NULL;
+	}
+	list_for_each_entry_safe(resource, next, &mdp_ctx.resource_list, list_entry) {
+		cancel_delayed_work_sync(&resource->delayCheckWork);
+		list_del(&resource->list_entry);
+		kfree(resource);
+	}
+	if (mdp_ctx.resource_check_queue) {
+		destroy_workqueue(mdp_ctx.resource_check_queue);
+		mdp_ctx.resource_check_queue = NULL;
+	}
+	cmdq_mdp_pool_clear();
+	dev_pm_opp_of_remove_table(&pdev->dev);
+	kfree(mdp_pmqos_freq);
+	kfree(isp_pmqos_freq);
+	kfree(mdp_volts);
+	kfree(isp_volts);
+	mdp_pmqos_freq = NULL;
+	isp_pmqos_freq = NULL;
+	mdp_volts = NULL;
+	isp_volts = NULL;
+	mdp_pmqos_opp_num = 0;
+}
+#endif
 
 void cmdq_mdp_deinit(void)
 {
@@ -4761,7 +4809,9 @@ void cmdq_mdp_check_TF_address(unsigned int mva, char *module)
 
 	/* Call smi dump */
 	CMDQ_ERR("[MDP] Dump SMI Info Begin\n");
+#if !IS_ENABLED(CONFIG_CANNON_BRINGUP) || IS_REACHABLE(CONFIG_MTK_SMI_DEBUG)
 	mtk_smi_dbg_hang_detect("MDP");
+#endif
 	CMDQ_ERR("[MDP] Dump SMI Info End\n");
 
 	/* search track task */

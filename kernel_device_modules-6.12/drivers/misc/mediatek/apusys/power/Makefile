@@ -110,3 +110,23 @@
 
 # obj-$(CONFIG_MTK_APUSYS_SUPPORT) += apu_top.o
 # apu_top-objs = $(SRC)
+
+ccflags-$(CONFIG_CANNON_BRINGUP) += -I$(srctree)/drivers/devfreq/
+
+# MT6853 uses the native 2.5 backend, not the newer remote-processor power ABI.
+# This is not wired into Cannon boot until its DT suppliers are restored.
+ifeq ($(CONFIG_CANNON_BRINGUP),y)
+ccflags-y += -I$(DEVICE_MODULES_PATH)/drivers/devfreq/
+ccflags-y += -I$(DEVICE_MODULES_PATH)/drivers/soc/mediatek/
+ccflags-y += -I$(DEVICE_MODULES_PATH)/drivers/misc/mediatek/include
+ccflags-y += -I$(DEVICE_MODULES_PATH)/drivers/misc/mediatek/apusys/debug/
+ccflags-y += -I$(DEVICE_MODULES_PATH)/include/linux/soc/mediatek/
+ccflags-y += -I$(DEVICE_MODULES_PATH)/drivers/misc/mediatek/apusys/include/
+ccflags-y += -I$(DEVICE_MODULES_PATH)/drivers/misc/mediatek/apusys/power/2.5/inc/
+obj-$(CONFIG_MTK_APUSYS_SUPPORT) += cannon_apu_power.o
+cannon_apu_power-y := cannon-apu-entry.o
+cannon_apu_power-y += 2.5/common/apu-clk.o 2.5/common/apu-common.o 2.5/common/apu-regulator.o 2.5/common/apu-rpc.o 2.5/common/apu-of.o 2.5/common/apu-plat.o 2.5/common/apu-driver.o 2.5/common/apu-dbg.o 2.5/common/apu-trace.o
+cannon_apu_power-y += 2.5/governor/gov-apusys.o 2.5/governor/gov-user.o 2.5/governor/common.o 2.5/governor/gov-constrain.o 2.5/governor/gov-apusys-pe.o
+cannon_apu_power-y += 2.5/devices/dev-freq-core.o 2.5/devices/dev-freq-conn.o 2.5/devices/dev-freq-vpu.o 2.5/devices/dev-freq-mdla.o 2.5/devices/dev-cb.o 2.5/devices/dev-freq-iommu.o 2.5/devices/dev-vb.o
+cannon_apu_power-y += 2.5/backward_compatible/apu_power_table.o
+endif

@@ -104,3 +104,7 @@ extern int ISP_SetPMQOS(
 	unsigned int *pvalue);
 
 #endif
+
+#if IS_ENABLED(CONFIG_CANNON_BRINGUP)
+bool cannon_cam_qos_ready(void);
+#endif

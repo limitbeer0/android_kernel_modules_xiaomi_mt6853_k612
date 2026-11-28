@@ -1624,6 +1624,20 @@ static int mdpsys_con_probe(struct platform_device *pdev)
 
 	CMDQ_LOG("%s\n", __func__);
 
+#if IS_ENABLED(CONFIG_CANNON_BRINGUP)
+	{
+		struct iommu_domain *domain = iommu_get_domain_for_dev(dev);
+
+		if (!domain)
+			return -EPROBE_DEFER;
+		if (domain->geometry.aperture_start != 0x200000000ULL ||
+		    domain->geometry.aperture_end != 0x2ffffffffULL)
+			return dev_err_probe(dev, -EINVAL, "MDP requires CAM-domain IOVA\n");
+		ret = dma_set_mask_and_coherent(dev, DMA_BIT_MASK(34));
+		if (ret)
+			return ret;
+	}
+#endif
 	mdpsys_con_ctx.dev = dev;
 
 	if (smmu_v3_enabled()) {

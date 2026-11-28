@@ -53,7 +53,11 @@ int main(void)
 			put32(p,1); put32(p+8,a.handle);
 			strcpy((char *)p+16,"cannon-ion-iova-probe");
 			check(custom(ion,p)==0,"set unique diagnostic name");
-			address=get_iova(ion,a.handle,16<<5,size);
+			address=get_iova(ion,a.handle,heap==10 ? 9<<5 : 2<<5,size);
+			check(get_iova(ion,a.handle,2<<5,size)==address,"shared MDP domain");
+			check(get_iova(ion,a.handle,9<<5,size)==address,"shared DIP domain");
+			check(get_iova(ion,a.handle,(11<<5)|15,size)==address,"shared WPE/MFB domain");
+			check(get_iova(ion,a.handle,16<<5,size)==address,"shared DIP/RAWA domain");
 			check(get_iova(ion,a.handle,(13<<5)|6,size)==address,"stable across CAMSV/RAW");
 			check(get_iova(ion,a.handle,17<<5,size)==address,"shared RAWA/RAWB domain");
 			shared=(struct cannon_ion_fd){.handle=a.handle,.fd=-1};
@@ -77,6 +81,12 @@ int main(void)
 			put32(p+28,0); put32(p+16,0xffffffff);
 			errno=0;
 			check(custom(other,p)==-1 && errno==EOPNOTSUPP,"reject invalid port");
+			put32(p+16,11<<5);
+			errno=0;
+			check(custom(other,p)==-1 && errno==EOPNOTSUPP,"reject unused LARB11 port");
+			put32(p+16,(9<<5)|26);
+			errno=0;
+			check(custom(other,p)==-1 && errno==EOPNOTSUPP,"reject reserved LARB9 port");
 			put32(p+16,16<<5); put32(p+8,0);
 			errno=0;
 			check(custom(other,p)==-1 && errno==EINVAL,"reject stale/invalid handle");

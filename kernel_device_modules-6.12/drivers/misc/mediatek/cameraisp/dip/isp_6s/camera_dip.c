@@ -41,6 +41,7 @@
 /* For spm_enable_sodi()/spm_disable_sodi(). */
 /* #include <mach/mt_spm_idle.h> */
 
+#include <linux/of_device.h>
 #include <linux/of_platform.h>
 #include <linux/of_irq.h>
 #include <linux/of_address.h>
@@ -464,6 +465,19 @@ struct dip_device {
 
 static struct dip_device *dip_devs;
 static int nr_dip_devs;
+#if IS_ENABLED(CONFIG_CANNON_BRINGUP)
+static struct dip_device cannon_dip_devices[DIP_DEV_NODE_NUM];
+static DEFINE_MUTEX(cannon_dip_probe_lock);
+static DEFINE_MUTEX(cannon_dip_clock_lock);
+static unsigned long cannon_dip_blocks;
+static bool cannon_dip_ready;
+static bool cannon_dip_shared;
+static bool cannon_dip_callbacks;
+static void cannon_dip_release_maps(void);
+static int cannon_dip_probe(struct platform_device *pdev);
+static void cannon_dip_remove(struct platform_device *pdev);
+extern bool cannon_mdp_frontend_ready(void);
+#endif
 #endif
 
 
@@ -4388,8 +4402,64 @@ static inline void DIP_Load_InitialSettings(void)
 /**************************************************************
  *
  **************************************************************/
-static void DIP_EnableClock(bool En)
+#if IS_ENABLED(CONFIG_CANNON_BRINGUP)
+static int cannon_dip_clock(bool enable)
 {
+	struct clk *clks[] = { dip_clk.DIP_IMG_LARB9, dip_clk.DIP_IMG_LARB11,
+		dip_clk.DIP_IMG_DIP, dip_clk.DIP_IMG_DIP_MSS, dip_clk.DIP_IMG_MFB_DIP };
+	int ret = 0, i;
+
+	mutex_lock(&cannon_dip_clock_lock);
+	if (!cannon_dip_ready) {
+		ret = -ENODEV;
+		goto out;
+	}
+	if (enable) {
+		if (G_u4DipEnClkCnt) {
+			G_u4DipEnClkCnt++;
+			goto out;
+		}
+		ret = pm_runtime_resume_and_get(dip_devs->dev);
+		if (ret < 0)
+			goto out;
+		for (i = 0; i < ARRAY_SIZE(clks); i++) {
+			ret = clk_prepare_enable(clks[i]);
+			if (ret)
+				goto undo;
+		}
+		DIP_Load_InitialSettings();
+		G_u4DipEnClkCnt = 1;
+		enable_irq(dip_devs[DIP_DIP_A_IDX].irq);
+	} else {
+		if (!G_u4DipEnClkCnt) {
+			ret = -EINVAL;
+			goto out;
+		}
+		if (--G_u4DipEnClkCnt)
+			goto out;
+		disable_irq(dip_devs[DIP_DIP_A_IDX].irq);
+		for (i = ARRAY_SIZE(clks) - 1; i >= 0; i--)
+			clk_disable_unprepare(clks[i]);
+		pm_runtime_put_sync(dip_devs->dev);
+		if (!IspInfo.UserCount)
+			cannon_dip_release_maps();
+	}
+	goto out;
+undo:
+	while (--i >= 0)
+		clk_disable_unprepare(clks[i]);
+	pm_runtime_put_sync(dip_devs->dev);
+out:
+	mutex_unlock(&cannon_dip_clock_lock);
+	return ret;
+}
+#endif
+
+static int DIP_EnableClock(bool En)
+{
+#if IS_ENABLED(CONFIG_CANNON_BRINGUP)
+	return cannon_dip_clock(En);
+#endif
 #if defined(EP_NO_CLKMGR)
 	unsigned int setReg;
 #endif
@@ -4463,6 +4533,7 @@ static void DIP_EnableClock(bool En)
 		/* !!cannot be used in spinlock!! */
 #endif
 	}
+	return 0;
 }
 
 
@@ -4963,6 +5034,7 @@ static signed int DIP_SetMemInfo
 		LOG_INF("set comq memory info is done!!\n");
 		break;
 	default:
+		Ret = -EINVAL;
 		LOG_ERR("error set memory info cmd:%d",
 			pMemInfoStruct->MemInfoCmd);
 		break;
@@ -6019,6 +6091,9 @@ static signed int DIP_WaitIrq(struct DIP_WAIT_IRQ_STRUCT *WaitIrq)
 /**************************************************************
  *
  **************************************************************/
+#if IS_ENABLED(CONFIG_CANNON_BRINGUP)
+#include "cannon-dip-dma.h"
+#endif
 static long DIP_ioctl(
 	struct file *pFile, unsigned int Cmd, unsigned long Param)
 {
@@ -6050,6 +6125,10 @@ static long DIP_ioctl(
 			current->comm, current->pid, current->tgid);
 		return -EFAULT;
 	}
+#if IS_ENABLED(CONFIG_CANNON_BRINGUP)
+	if (Cmd == DIP_SET_BUF_PA || Cmd == DIP_DET_BUF_FD)
+		return cannon_dip_dma_ioctl(Cmd, (void __user *)Param);
+#endif
 	/*  */
 	pUserInfo = (struct DIP_USER_INFO_STRUCT *)(pFile->private_data);
 	/*  */
@@ -6471,6 +6550,8 @@ static int compat_get_dip_mem_info(
 	ret = (long)copy_from_user(&data32, compat_ptr(arg),
 			(unsigned long)sizeof(struct compat_DIP_MEM_INFO_STRUCT));
 
+	if (ret)
+		return -EFAULT;
 	data->MemInfoCmd = data32.MemInfoCmd;
 	data->MemPa = data32.MemPa;
 	data->MemVa = compat_ptr(data32.MemVa);
@@ -6563,11 +6644,11 @@ static long DIP_ioctl_compat(
 			LOG_INF("COMPAT_DIP_SET_MEM_INFO error!!!\n");
 			return err;
 		}
-		ret = filp->f_op->unlocked_ioctl(filp,
-			DIP_SET_MEM_INFO,
-			(unsigned long)&data);
+		ret = DIP_SetMemInfo(&data);
 		return ret;
 	}
+	case DIP_SET_BUF_PA:
+	case DIP_DET_BUF_FD:
 	case DIP_GET_GCE_FIRST_ERR:
 	case DIP_GET_DUMP_INFO:
 	case DIP_WAIT_IRQ:
@@ -6594,6 +6675,10 @@ static signed int DIP_open(
 	int q = 0;
 	struct DIP_USER_INFO_STRUCT *pUserInfo;
 
+	#if IS_ENABLED(CONFIG_CANNON_BRINGUP)
+	if (!READ_ONCE(cannon_dip_ready))
+		return -ENODEV;
+#endif
 	LOG_DBG("- E. UserCount: %d.\n", IspInfo.UserCount);
 
 	mutex_lock(&gDipMutex);  /* Protect the Multi Process */
@@ -6614,6 +6699,10 @@ static signed int DIP_open(
 		pUserInfo = (struct DIP_USER_INFO_STRUCT *)pFile->private_data;
 		pUserInfo->Pid = current->pid;
 		pUserInfo->Tid = current->tgid;
+	}
+	if (Ret) {
+		spin_unlock(&IspInfo.SpinLockIspRef);
+		goto EXIT;
 	}
 	/*  */
 	if (IspInfo.UserCount > 0) {
@@ -6795,7 +6884,18 @@ static signed int DIP_open(
 #else
 	wake_lock(&dip_wake_lock);
 #endif
-	DIP_EnableClock(MTRUE);
+	Ret = DIP_EnableClock(MTRUE);
+	if (Ret) {
+#ifdef CONFIG_PM_WAKELOCKS
+		__pm_relax(dip_wake_lock);
+#endif
+		spin_lock(&IspInfo.SpinLockIspRef);
+		IspInfo.UserCount--;
+		spin_unlock(&IspInfo.SpinLockIspRef);
+		kfree(pFile->private_data);
+		pFile->private_data = NULL;
+		goto EXIT;
+	}
 	g_u4DipCnt = 0;
 #ifdef CONFIG_PM_WAKELOCKS
 	__pm_relax(dip_wake_lock);
@@ -7190,8 +7290,14 @@ static void DIP_add_device_link(struct platform_device *pDev)
 /**************************************************************
  *
  **************************************************************/
+#if IS_ENABLED(CONFIG_CANNON_BRINGUP)
+#include "cannon-dip-platform.h"
+#endif
 static signed int DIP_probe(struct platform_device *pDev)
 {
+#if IS_ENABLED(CONFIG_CANNON_BRINGUP)
+	return cannon_dip_probe(pDev);
+#endif
 	signed int Ret = 0;
 	/*    struct resource *pRes = NULL;*/
 	signed int i = 0, j = 0;
@@ -7525,6 +7631,10 @@ EXIT:
  **************************************************************/
 static void DIP_remove(struct platform_device *pDev)
 {
+#if IS_ENABLED(CONFIG_CANNON_BRINGUP)
+	cannon_dip_remove(pDev);
+	return;
+#endif
 	/*    struct resource *pRes;*/
 	signed int IrqNum;
 	int i;
@@ -7679,6 +7789,7 @@ static struct platform_driver DipDriver = {
 	.resume  = DIP_resume,
 	.driver  = {
 		.name  = DIP_DEV_NAME,
+		.suppress_bind_attrs = IS_ENABLED(CONFIG_CANNON_BRINGUP),
 		.owner = THIS_MODULE,
 #ifdef CONFIG_OF
 		.of_match_table = dip_of_ids,
@@ -8417,7 +8528,8 @@ static signed int __init DIP_Init(void)
 	/*  */
 	LOG_DBG("- E. Magic: %d", DIP_MAGIC);
 	/*  */
-	Ret = platform_driver_register(&DipDriver);
+	Ret = IS_ENABLED(CONFIG_CANNON_BRINGUP) ? 0 :
+		platform_driver_register(&DipDriver);
 	if ((Ret) < 0) {
 		LOG_ERR("platform_driver_register fail");
 		return Ret;
@@ -8430,7 +8542,7 @@ static signed int __init DIP_Init(void)
 	dip_p2_dir = proc_mkdir("isp_p2", NULL);
 	if (!dip_p2_dir) {
 		LOG_ERR("[%s]: fail to mkdir /proc/isp_p2\n", __func__);
-		return 0;
+		return -ENOMEM;
 	}
 	proc_entry = proc_create("dip_dump",
 		0444, dip_p2_dir, &dip_dump_proc_fops);
@@ -8463,6 +8575,7 @@ static signed int __init DIP_Init(void)
 	pLog_kmalloc = kmalloc(i, GFP_KERNEL);
 	if ((pLog_kmalloc) == NULL) {
 		LOG_ERR("mem not enough\n");
+		remove_proc_subtree("isp_p2", NULL);
 		return -ENOMEM;
 	}
 	memset(pLog_kmalloc, 0x00, i);
@@ -8490,7 +8603,7 @@ static signed int __init DIP_Init(void)
 		}
 	}
 
-#ifndef EP_CODE_MARK_CMDQ
+#if !defined(EP_CODE_MARK_CMDQ) && !IS_ENABLED(CONFIG_CANNON_BRINGUP)
 	/* Register DIP callback */
 	LOG_INF("register dip callback for MDP");
 	cmdqCoreRegisterCB(mdp_get_group_isp(),
@@ -8674,7 +8787,28 @@ static signed int __init DIP_Init(void)
 	Ret = register_pm_notifier(&dip_suspend_pm_notifier_func);
 	if (Ret) {
 		pr_debug("[Camera DIP] Failed to register PM notifier.\n");
+		if (IS_ENABLED(CONFIG_CANNON_BRINGUP)) {
+			remove_proc_subtree("isp_p2", NULL);
+			kfree(pLog_kmalloc);
+			pLog_kmalloc = NULL;
+		}
 		return Ret;
+	}
+#endif
+#if IS_ENABLED(CONFIG_CANNON_BRINGUP)
+	dip_devs = cannon_dip_devices;
+	mtk_dip_count = 1;
+	max_tdr_no = MAX_ISP_TILE_TDR_TOTAL_HEXNO;
+	mfb_base_hw = msf_base_hw = 0x15810000;
+	mss_base_hw = 0x15812000;
+	Ret = platform_driver_register(&DipDriver);
+	if (Ret) {
+#if IS_ENABLED(CONFIG_PM)
+		unregister_pm_notifier(&dip_suspend_pm_notifier_func);
+#endif
+		remove_proc_subtree("isp_p2", NULL);
+		kfree(pLog_kmalloc);
+		pLog_kmalloc = NULL;
 	}
 #endif
 	LOG_DBG("- X. Ret: %d.", Ret);
@@ -8690,7 +8824,11 @@ static void __exit DIP_Exit(void)
 
 	LOG_DBG("- E.");
 	/*  */
+#if IS_ENABLED(CONFIG_PM)
+	unregister_pm_notifier(&dip_suspend_pm_notifier_func);
+#endif
 	platform_driver_unregister(&DipDriver);
+	remove_proc_subtree("isp_p2", NULL);
 	/*  */
 #ifndef EP_CODE_MARK_CMDQ
 	/* Unregister DIP callback */
@@ -8727,6 +8865,7 @@ static void __exit DIP_Exit(void)
 
 int32_t DIP_MDPClockOnCallback(uint64_t engineFlag)
 {
+	int ret;
 	/* LOG_DBG("DIP_MDPClockOnCallback"); */
 	/*LOG_DBG("+MDPEn:%d", G_u4DipEnClkCnt);*/
 #ifdef CONFIG_PM_WAKELOCKS
@@ -8734,9 +8873,12 @@ int32_t DIP_MDPClockOnCallback(uint64_t engineFlag)
 #else
 		wake_lock(&isp_mdp_wake_lock);
 #endif
-	DIP_EnableClock(MTRUE);
-
-	return 0;
+	ret = DIP_EnableClock(MTRUE);
+#ifdef CONFIG_PM_WAKELOCKS
+	if (ret)
+		__pm_relax(isp_mdp_wake_lock);
+#endif
+	return ret;
 }
 
 int32_t DIP_MDPDumpCallback(uint64_t engineFlag, int level)

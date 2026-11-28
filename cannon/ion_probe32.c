@@ -76,6 +76,17 @@ void _start(void)
 			p=(volatile unsigned char *)address;
 			for (u32 i=0; i<8192; i++) if(p[i]) fail("zero");
 			p[0]=0x6a; p[8191]=0xc5;
+			u32 sync[12];
+			for (u32 i=0; i<12; i++) sync[i]=0;
+			sync[2]=a.handle; sync[3]=(u32)address; sync[4]=8192;
+			custom.cmd=0; custom.arg=(u32)sync;
+			for (u32 type=0; type<3; type++) {
+				sync[5]=type;
+				if (ioctl(ion,0xc0084906,&custom)<0)
+					fail("compat real cache sync");
+			}
+			if (p[0]!=0x6a || p[8191]!=0xc5)
+				fail("cache sync preserved data");
 			imported.handle=0; imported.fd=share.fd;
 			if (ioctl(other, 0xc0084905, &imported)<0) fail("import");
 			if (heap) {
@@ -118,7 +129,7 @@ void _start(void)
 		}
 	}
 	call(6,ion,0,0,0,0,0); call(6,other,0,0,0,0,0);
-	say("PASS ARM32: 3 heaps x cached/uncached, alloc/share/import/mmap2/free/lifetime + custom metadata/CAM IOVA\n");
+	say("PASS ARM32: 3 heaps x cached/uncached, alloc/share/import/mmap2/free/lifetime + real cache sync/custom metadata/CAM IOVA\n");
 	call(1,0,0,0,0,0,0);
 	__builtin_unreachable();
 }

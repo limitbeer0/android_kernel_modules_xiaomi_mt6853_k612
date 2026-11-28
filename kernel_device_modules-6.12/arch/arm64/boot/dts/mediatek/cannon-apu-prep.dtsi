@@ -1,0 +1,91 @@
+// SPDX-License-Identifier: GPL-2.0-only
+// Prepared native MT6853 APU2.5 graph, NOT included by cannon.dts yet.
+// All consumers stay disabled pending RPC/IOMMU/firmware integration.
+// Clock references are translated by cannon/prepare_apu_dt.py.
+// Fixed initial OPPs preserve the tested display/ISP Vcore floor.
+/ {
+ cannon_apu_core_opp: cannon-apu-core-opp {
+  compatible = "operating-points-v2";
+  opp-546000000 { opp-hz = /bits/ 64 <546000000>; opp-microvolt = <725000>; };
+ };
+ cannon_apu_conn_opp: cannon-apu-conn-opp {
+  compatible = "operating-points-v2";
+  opp-624000000 { opp-hz = /bits/ 64 <624000000>; opp-microvolt = <750000>; };
+ };
+ cannon_apu_vpu_opp: cannon-apu-vpu-opp {
+  compatible = "operating-points-v2"; opp-shared;
+  opp-624000000 { opp-hz = /bits/ 64 <624000000>; opp-microvolt = <750000>; };
+ };
+ cannon-apu-rpc@190f0000 {
+  compatible = "mtk68xx,apurpc";
+  status = "disabled";
+  reg = <0 0x190f0000 0 0x1000>, <0 0x10000000 0 0x1000>, <0 0x10006000 0 0x1000>;
+  cg-names = "vcore_cg_con", "conn_cg_con", "vpu0_cg_con", "vpu1_cg_con";
+  cgs = <0 0x19029000 0 0>, <0 0x19020000 0 0>,
+        <0 0x19030000 0 0x100>, <0 0x19031000 0 0x100>;
+  clock-names = "conn", "vpu0", "vpu1", "vcore";
+  clocks = <0x3e 0xa5>, <0x3e 0xa7>, <0x3e 0xa9>, <0x3e 0xaa>;
+  voltage-names = "vvpu", "vcore", "vsram";
+  vcore-supply = <&cannon_dvfsrc_vcore>;
+  vvpu-supply = <0x4c>;
+  vsram-supply = <0x9f>;
+ };
+ cannon_apucore: APUCORE {
+  compatible = "mtk6853,apucore";
+  status = "disabled";
+  operating-points-v2 = <&cannon_apu_core_opp>;
+  vcore-supply = <&cannon_dvfsrc_vcore>;
+  sys-mux = <0x3e 0xaa>;
+  sys-mux-parent = <0x3e 0x56>, <0x3e 0x27>, <0x3e 0x3>, <0x3e 0x1e>, <0x3e 0x26>, <0x3e 0x2>, <0x3e 0x43>, <0x3e 0x1d>;
+  gov = "apuuser";
+  depth = <3>;
+  cannon_apuconn: APUCONN {
+   compatible = "mtk6853,apucon";
+   status = "disabled";
+   operating-points-v2 = <&cannon_apu_conn_opp>;
+   vvpu-supply = <0x4c>;
+   vsram-supply = <0x9f>;
+   sys-mux = <0x3e 0xa5>;
+   sys-mux-parent = <0x3e 0x56>, <0x3e 0x13>, <0x3e 0x1e>, <0x3e 0x21>, <0x3e 0x1d>, <0x3e 0x26>, <0x3e 0x1>, <0x3e 0x1c>;
+   devfreq = <&cannon_apucore>;
+   gov = "apuconstrain";
+   depth = <2>;
+   consumer = <0x8c>;
+  };
+ };
+};
+&{/apusys_power} {
+ APUCB {
+  compatible = "mediatek,apusys_cb";
+  status = "disabled";
+ };
+ cannon_apuvpu: APUVPU {
+  compatible = "mtk68x3,apuvpu";
+  status = "disabled";
+  operating-points-v2 = <&cannon_apu_vpu_opp>;
+  apmix-pll = <0x54 13>;
+  mediatek,apmixed = <0x54>;
+  sys-mux = <0x3e 0xec>, <0x3e 0xed>;
+  top-mux = <0x3e 0xa7>, <0x3e 0xa9>;
+  top-pll = <0x3e 0x42>;
+  devfreq = <&cannon_apuconn>;
+  gov = "apupassive";
+  depth = <1>;
+  APUVPU@0 {
+   compatible = "mtk68x3,apuvpu0";
+   status = "disabled";
+   operating-points-v2 = <&cannon_apu_vpu_opp>;
+   top-mux = <0x3e 0xa7>;
+   devfreq = <&cannon_apuvpu>;
+   gov = "apupassive"; depth = <0>;
+  };
+  APUVPU@1 {
+   compatible = "mtk68x3,apuvpu1";
+   status = "disabled";
+   operating-points-v2 = <&cannon_apu_vpu_opp>;
+   top-mux = <0x3e 0xa9>;
+   devfreq = <&cannon_apuvpu>;
+   gov = "apupassive"; depth = <0>;
+  };
+ };
+};

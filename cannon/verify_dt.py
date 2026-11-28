@@ -92,7 +92,7 @@ def main():
                 if (get(merged, "s", node, "compatible") != compatible or
                         get(merged, "x", node, "power-domains") != spm_phandle + " " + domain):
                     raise SystemExit("Camera clock provider/domain changed after signed overlay")
-        if get(merged, "x", "/m4u@14016000", "mediatek,larbs") != "81 84 92 93 94 95":
+        if get(merged, "x", "/m4u@14016000", "mediatek,larbs") != "81 84 8d 90 91 92 93 94 95":
             raise SystemExit("Camera LARBs missing from native IOMMU after stock overlay")
         for node, domain in (("/smi_larb13@1a001000", "f"),
                              ("/smi_larb14@1a002000", "f"),
@@ -103,15 +103,79 @@ def main():
                     get(merged, "x", "/power-controller@10006000", "phandle") + " " + domain):
                 raise SystemExit("Camera SMI clock/domain binding lost after stock overlay")
         m4u = get(merged, "x", "/m4u@14016000", "phandle")
-        for larb, count in ((13, 9), (16, 17), (17, 17)):
+        for larb, ports in ((2, range(4)), (9, range(26)), (11, range(15, 26)), (13, range(9)), (16, range(17)), (17, range(17))):
             node = "/cannon-camera-dma-larb" + str(larb)
             if get(merged, "s", node, "compatible") != "xiaomi,cannon-camera-dma":
                 raise SystemExit("Unexpected camera DMA mapper compatible")
             expected = []
-            for port in range(count):
+            for port in ports:
                 expected += [m4u, format(0x20000 | (larb << 5) | port, "x")]
             if get(merged, "x", node, "iommus").split() != expected:
                 raise SystemExit("Camera DMA IOMMU ports changed after signed overlay")
+        for provider in ("/syson@15020000", "/syscon@15820000"):
+            props = subprocess.check_output(
+                ["fdtget", "-p", str(merged), provider], text=True).splitlines()
+            if "power-domains" in props:
+                raise SystemExit("IMG clock provider must not depend on its SCPSYS consumer")
+        for node, domain in (("/imgsys_config@15020000", "7"),
+                             ("/imgsys2_config@15820000", "8")):
+            if get(merged, "x", node, "power-domains") != spm_phandle + " " + domain:
+                raise SystemExit("DIP consumer power domain missing after signed overlay")
+        if get(merged, "x", "/imgsys_config@15020000", "iommus") != "83 20120":
+            raise SystemExit("DIP must use real LARB9 CAM IOMMU domain")
+        if get(merged, "x", "/dip_a0@15021000", "interrupts") != "0 15a 4":
+            raise SystemExit("DIP_A must retain Cannon SPI346")
+        mdp = "/cannon-mdp@1f000000"
+        if (get(merged, "s", mdp, "compatible").split()[0] != "xiaomi,cannon-mdp" or
+                get(merged, "u", mdp, "thread-count") != "24" or
+                get(merged, "u", mdp, "mboxes") !=
+                "82 19 0 1 82 20 0 1 82 21 0 1 82 22 0 1" or
+                get(merged, "x", mdp, "mediatek,mailbox-gce") != "52"):
+            raise SystemExit("Cannon MDP must use real normal GCE threads19..22")
+        if (get(merged, "x", "/mdpsys_config@1f000000", "iommus") !=
+                "83 20040 83 20041 83 20042 83 20043"):
+            raise SystemExit("MDP data imports must use the real LARB2 IOMMU domain")
+        if get(merged, "u", "/cannon-mdp-fixed-opp/opp-594000000", "opp-microvolt") != "725000":
+            raise SystemExit("MDP measured594MHz requires the725mV fixed floor")
+        dvfsrc = "/dvfsrc@10012000"
+        if get(merged, "s", dvfsrc, "compatible") != "mediatek,mt6853-dvfsrc":
+            raise SystemExit("DVFSRC must use the native MT6853 provider")
+        subprocess.run(["fdtget", str(merged), dvfsrc, "xiaomi,cannon-legacy-firmware"],
+                       check=True, stdout=subprocess.DEVNULL)
+        vcore = dvfsrc + "/dvfsrc-vcore"
+        for prop in ("regulator-min-microvolt", "regulator-max-microvolt"):
+            if get(merged, "u", vcore, prop) != "725000":
+                raise SystemExit("Fixed LK clocks require the 725mV Vcore floor")
+        common = "/disp_smi_common@14002000"
+        mmqos = "/cannon-mmqos"
+        if (get(merged, "x", mmqos, "mediatek,commons-supply") !=
+                get(merged, "x", common, "phandle") or
+                get(merged, "x", common, "mmdvfs-dvfsrc-vcore-supply") !=
+                get(merged, "x", vcore, "phandle")):
+            raise SystemExit("MMQoS common/Vcore supplier reference changed after overlay")
+        if (get(merged, "x", mmqos, "mediatek,larbs-supply") != "81 84 8d 90 91 92 93 94 95" or
+                get(merged, "x", mmqos, "clocks") != "3e 9d"):
+            raise SystemExit("Cannon MMQoS LARB/clock bindings changed after overlay")
+        isp = "/camisp_legacy@1a000000"
+        if (get(merged, "s", isp, "compatible") != "mediatek,camisp_legacy" or
+                get(merged, "s", isp, "mediatek,platform") != "mt6853" or
+                get(merged, "x", isp, "reg") != "0 1a000000 0 10000"):
+            raise SystemExit("Native MT6853 ISP master binding changed by overlay")
+        if len(get(merged, "s", isp, "clock-names").split()) != 18:
+            raise SystemExit("MT6853 ISP must have 18 real clock consumers")
+        for name, base, irq in (("cam1", 0x1a030000, 320), ("cam2", 0x1a050000, 321),
+                               *[(f"camsv{i}", 0x1a090000 + i * 0x1000, irq)
+                                 for i, irq in enumerate((327, 328, 329, 330, 334, 335), 2)]):
+            node = f"/{name}_legacy@{base:x}"
+            if get(merged, "u", node, "interrupts") != f"0 {irq} 4":
+                raise SystemExit(f"ISP IRQ mapping changed: {node}")
+        qos = "/cam_qos_legacy"
+        if (get(merged, "x", qos, "dvfsrc-vcore-supply") != get(merged, "x", vcore, "phandle") or
+                get(merged, "x", qos, "clocks") != "3e a3"):
+            raise SystemExit("CAM QoS must use physical CAM clock and DVFSRC Vcore")
+        if (get(merged, "u", "/cannon-cam-fixed-opp/opp-624000000", "opp-microvolt") != "725000" or
+                get(merged, "x", "/cannon-cam-fixed-opp/opp-624000000", "opp-hz") != "0 25317c00"):
+            raise SystemExit("CAM OPP must match the measured 624MHz/725mV floor")
         fingerprint_properties = subprocess.check_output(
             ["fdtget", "-p", str(merged), "/fingerprint"], text=True).splitlines()
         if "fpc,spi" in fingerprint_properties:
